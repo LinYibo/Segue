@@ -1,0 +1,315 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme {
+  --color-bg: #ffffff;
+  --color-surface: #f7f6f2;
+  --color-fg: #1c1b18;
+  --color-muted: #6d6a61;
+  --color-faint: #a4a099;
+  --color-accent: #5a6f85;
+  --color-accent-fg: #ffffff;
+  --color-border: #e4e1da;
+  --color-paper: #f4efe6;
+  --color-ink: #1a1714;
+  --color-ink-muted: #5c564c;
+  --color-mark: #e6d2a3;
+  --color-well: #cfc6b6;
+  --color-danger: #c45c4a;
+  --font-sans:
+    "Instrument Sans", "PingFang SC", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
+  --font-serif:
+    "Newsreader", "Songti SC", "Noto Serif SC", ui-serif, Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --shadow-border: 0 0 0 1px rgba(242, 239, 232, 0.08);
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  html,
+  body,
+  #app {
+    height: 100%;
+    background: var(--color-bg);
+    color: var(--color-fg);
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--color-accent) 38%, transparent);
+    color: var(--color-fg);
+  }
+  .reader-scroll ::selection {
+    background: color-mix(in oklab, var(--color-mark) 70%, transparent);
+    color: var(--color-ink);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@layer reader-defaults {
+  .prose-reader {
+    font-family: var(--font-serif);
+    color: var(--color-ink);
+    font-size: 1.0625rem;
+    line-height: 1.7;
+    text-wrap: pretty;
+    /* Offscreen chapters skip layout+paint and remember their rendered height —
+     the DOM equivalent of SumatraPDF laying out pages lazily; without this a
+     whole-book render janks on every scroll. */
+    content-visibility: auto;
+    contain-intrinsic-size: auto 1600px;
+  }
+  .prose-reader h1,
+  .prose-reader h2,
+  .prose-reader h3,
+  .prose-reader h4 {
+    font-family: var(--font-serif);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+    color: var(--color-ink);
+    line-height: 1.25;
+  }
+  .prose-reader h1 {
+    font-size: 2.05rem;
+    margin: 0 0 1.25rem;
+  }
+  .prose-reader h2 {
+    font-size: 1.35rem;
+    margin: 2rem 0 0.75rem;
+  }
+  .prose-reader h3 {
+    font-size: 1.12rem;
+    margin: 1.5rem 0 0.5rem;
+  }
+  .prose-reader p {
+    margin: 0 0 1rem;
+  }
+  .prose-reader blockquote {
+    margin: 1.25rem 0;
+    padding: 0.15rem 0 0.15rem 1.1rem;
+    border-left: 2px solid color-mix(in oklab, var(--color-ink) 22%, transparent);
+    color: var(--color-ink-muted);
+    font-style: italic;
+  }
+  .prose-reader ul,
+  .prose-reader ol {
+    margin: 0 0 1rem 1.2rem;
+  }
+  .prose-reader li {
+    margin: 0.25rem 0;
+  }
+  .prose-reader code {
+    font-family: var(--font-mono);
+    font-size: 0.84em;
+    background: color-mix(in oklab, var(--color-ink) 6%, transparent);
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+  }
+  .prose-reader hr {
+    border: 0;
+    border-top: 1px solid color-mix(in oklab, var(--color-ink) 12%, transparent);
+    margin: 1.75rem 0;
+  }
+  /* Reader defaults below only fill gaps: the book's own stylesheet is injected
+   at parse time, unlayered, and unlayered author styles always beat layered
+   ones — so a book that styles links/headings wins, one that doesn't gets
+   these. */
+  /* MuPDF's UA default (ext/mupdf source/html/html-parse.c, html_default_css):
+   "a:link{color:blue;text-decoration:underline}" — href-less anchors stay
+   plain text. Books styling their own links override this via the injected
+   publisher CSS, which is unlayered and sits above this layer. */
+  .prose-reader a[href] {
+    color: blue;
+    text-decoration: underline;
+  }
+  .prose-reader img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 1.25rem auto;
+  }
+  .prose-reader figure {
+    margin: 1.25rem 0;
+  }
+  .prose-reader figcaption {
+    margin-top: 0.5rem;
+    font-size: 0.85em;
+    text-align: center;
+    color: var(--color-ink-muted);
+  }
+  .prose-reader table {
+    width: 100%;
+    margin: 1.25rem 0;
+    border-collapse: collapse;
+    font-size: 0.95em;
+  }
+  .prose-reader th,
+  .prose-reader td {
+    border: 1px solid color-mix(in oklab, var(--color-ink) 18%, transparent);
+    padding: 0.35rem 0.6rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  .prose-reader dt {
+    font-weight: 600;
+    margin-top: 1rem;
+  }
+  .prose-reader dd {
+    margin: 0.25rem 0 0.5rem 1.2rem;
+  }
+}
+
+/* Reading surface scrolls by wheel/keyboard; hiding the scrollbar keeps the
+   1px page margins symmetric (a classic bar reserves ~17px on the right). */
+.reader-scroll {
+  scrollbar-width: none;
+}
+.reader-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* In scrolled flow the foliate renderers scroll internally, and the native
+   scrollbar would overlap our own position indicator — Segue keeps the
+   indicator and hides the native one. The paginator's scroller exports
+   part=container (view.js exportparts); scrollbar-width does NOT inherit,
+   so the fixed-layout host gets its own rule injected by the reader. */
+foliate-view::part(container) {
+  scrollbar-width: none;
+}
+
+/* Reader highlights (EPUB and PDF alike) are drawn by foliate's overlayer
+   inside the book iframe; the selection toolbar color comes from the
+   draw-annotation handler. */
+
+.chat-prose p {
+  margin: 0 0 0.7rem;
+}
+.chat-prose p:last-child {
+  margin-bottom: 0;
+}
+.chat-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  background: color-mix(in oklab, var(--color-fg) 8%, transparent);
+  padding: 0.05em 0.3em;
+  border-radius: 4px;
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--color-fg) 18%, transparent) transparent;
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--color-fg) 12%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@layer reader-defaults {
+  /* Code blocks: GitHub light tokens (Prism ghcolors palette) on white cards. */
+  .prose-reader pre {
+    background: #ffffff;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    padding: 0.85rem 1rem;
+    overflow-x: auto;
+    font-size: 0.84rem;
+    line-height: 1.55;
+  }
+  .prose-reader pre code {
+    background: none;
+    padding: 0;
+    font-size: inherit;
+    border-radius: 0;
+  }
+  .prose-reader code[class*="language-"] {
+    color: #24292f;
+  }
+  .prose-reader .token.comment,
+  .prose-reader .token.prolog,
+  .prose-reader .token.cdata {
+    color: #6e7781;
+  }
+  .prose-reader .token.doctype,
+  .prose-reader .token.punctuation {
+    color: #57606a;
+  }
+  .prose-reader .token.namespace {
+    opacity: 0.7;
+  }
+  .prose-reader .token.property,
+  .prose-reader .token.tag,
+  .prose-reader .token.boolean,
+  .prose-reader .token.constant,
+  .prose-reader .token.symbol {
+    color: #0550ae;
+  }
+  .prose-reader .token.selector,
+  .prose-reader .token.attr-name,
+  .prose-reader .token.string,
+  .prose-reader .token.char,
+  .prose-reader .token.builtin,
+  .prose-reader .token.inserted {
+    color: #0a3069;
+  }
+  .prose-reader .token.operator,
+  .prose-reader .token.entity,
+  .prose-reader .token.url {
+    color: #57606a;
+  }
+  .prose-reader .token.atrule,
+  .prose-reader .token.attr-value,
+  .prose-reader .token.keyword {
+    color: #cf222e;
+  }
+  .prose-reader .token.function {
+    color: #8250df;
+  }
+  .prose-reader .token.class-name {
+    color: #953800;
+  }
+  .prose-reader .token.regex,
+  .prose-reader .token.important,
+  .prose-reader .token.variable {
+    color: #0a3069;
+  }
+  .prose-reader .token.important {
+    font-weight: bold;
+  }
+  .prose-reader .token.deleted {
+    color: #82071e;
+  }
+}
