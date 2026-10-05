@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Overlayer } from "@/foliate-js/overlayer.js";
+import { SectionProgress } from "@/foliate-js/progress.js";
 import "@/foliate-js/view.js";
 import type { FoliateView, RelocateDetail } from "@/foliate-js/view.js";
 import {
   applyFixedlayoutStyles,
   applyImageStyle,
   applyNamespacedAttributes,
-  applyScrollModeClass,
-  applyThemeModeClass,
   getDirection,
   getPageProgressionRTL,
   isCJKEnv,
@@ -23,27 +22,40 @@ import {
 import { dropBook, getBook } from "@/lib/parse/foliate";
 import { useSegue } from "@/lib/store";
 import type { DocKind } from "@/lib/types";
-import { createWheelGestureDetector } from "@/lib/wheel-gesture";
 
 // Ported from readest's reader (FoliateViewer.tsx + usePagination.ts +
-// iframeEventHandlers.ts + wheelGesture.ts, desktop subset): the same
-// open-sequence attributes for both renderers (foliate-paginator for EPUB,
-// foliate-fxl for PDF), injected stylesheet, iframe event relay with click
-// zones, double-click protection and wheel-gesture coalescing, and
-// rAF-coalesced relocation. Shell glue (locator sync, CFI highlights,
-// selection capture) stays Segue's.
+// iframeEventHandlers.ts, desktop subset): the same open-sequence attributes
+// for both renderers (foliate-paginator for EPUB, foliate-fxl for PDF),
+// injected stylesheet, iframe event relay with click zones and double-click
+// protection, and rAF-coalesced relocation. Shell glue (locator sync, CFI
+// highlights, selection capture) stays Segue's.
 
 const DOUBLE_CLICK_INTERVAL_THRESHOLD_MS = 250;
 const LONG_HOLD_THRESHOLD = 500;
 
+// The element whose geometry feeds the scrollbar metrics channel
+// ("segue-reader-scroll"): the paginator's #container for reflowable
+// content, the fxl host itself (overflow: auto) for fixed layout — the same
+// split view.js uses to pick the renderer. Seeks do not go through it: the
+// position axis is the whole-book fraction (see applySeek).
+function scrollerOf(view: FoliateView): HTMLElement | null {
+  if (view.isFixedLayout) return view.renderer;
+  return (view.renderer.shadowRoot?.getElementById("container") as HTMLElement | null) ?? null;
+}
+
+function clamp01(f: number): number {
+  return Math.min(1, Math.max(0, f));
+}
+
 // usePagination.ts viewPagination (Segue subset): in scrolled flow a turn is
 // one viewport scroll (scrollingOverlap = 0); RTL books flip left/right.
+// The fxl renderer (PDF) exposes no `scrolled` flag, so page turns fall
+// through to plain prev()/next().
 const viewPagination = (
-  view: FoliateView | null,
+  view: FoliateView,
   settings: EpubViewSettings,
   side: "left" | "right" | "up" | "down",
 ) => {
-  if (!view) return;
   if (settings.rtl) {
     if (side === "left") side = "right";
     else if (side === "right") side = "left";
@@ -68,6 +80,7 @@ export function FoliateReader({
   const root = useRef<HTMLDivElement>(null);
   const viewRef = useRef<FoliateView | null>(null);
   const settingsRef = useRef<EpubViewSettings | null>(null);
+  const progressRef = useRef<SectionProgress | null>(null);
   const initedRef = useRef(false);
   // last locator this reader reported from a relocate — the jump effect must
   // not re-scroll to our own reports
@@ -82,6 +95,40 @@ export function FoliateReader({
   const pendingRelocate = useRef<RelocateDetail | null>(null);
   const relocateRaf = useRef<number | null>(null);
   const relocateTimer = useRef(0);
+  // The scrollbar's position axis for reflowable content: the whole-book
+  // fraction of the last relocate. Scroll events between relocates report the
+  // same stored value, so every path into the pane feeds one coordinate
+  // system and the thumb never jumps between axes.
+  const lastFractionRef = useRef<number | undefined>(undefined);
+  // The single metrics channel for the pane's scrollbar thumb: the scroller's
+  // geometry plus the position axis — whole-book fraction for reflowable
+  // content (size-weighted, stable across section load/evict; undefined until
+  // the first relocate), pixel fraction for fixed layout. `live` tells the
+  // pane the drag style: fixed layout follows a dragged thumb with real pixel
+  // scrolls (stable range, cheap rasterization); reflowable content scrubs
+  // locally and seeks once on release (section loads are main-thread work).
+  // Relocates seed the metrics even when nothing user-scrolled yet (EPUB
+  // opens at the top with no native scroll event), and scrolls between
+  // relocates re-report the same stored fraction so both paths agree.
+  const reportMetrics = () => {
+    const v = viewRef.current;
+    if (!v) return;
+    const el = scrollerOf(v);
+    if (!el) return;
+    root.current?.dispatchEvent(
+      new CustomEvent("segue-reader-scroll", {
+        bubbles: true,
+        composed: true,
+        detail: {
+          scrollTop: el.scrollTop,
+          scrollHeight: el.scrollHeight,
+          clientHeight: el.clientHeight,
+          fraction: v.isFixedLayout ? undefined : lastFractionRef.current,
+          live: v.isFixedLayout,
+        },
+      }),
+    );
+  };
   const commitRelocate = useRef(() => {});
   commitRelocate.current = () => {
     if (relocateRaf.current != null) {
@@ -91,7 +138,16 @@ export function FoliateReader({
     window.clearTimeout(relocateTimer.current);
     const detail = pendingRelocate.current;
     pendingRelocate.current = null;
-    if (!detail?.cfi) return;
+    if (!detail) return;
+    const v = viewRef.current;
+    if (v) {
+      if (!v.isFixedLayout && typeof detail.fraction === "number") {
+        lastFractionRef.current = detail.fraction;
+      }
+      reportMetrics();
+    }
+    if (!detail.cfi) return;
+
     const state = useSegue.getState();
     const current = detail.section?.current ?? -1;
     const sec = state.sections[state.activeDocId ?? ""]?.[current];
@@ -106,6 +162,7 @@ export function FoliateReader({
     let cancelled = false;
     let view: FoliateView | null = null;
     let dropRelayObserver: MutationObserver | null = null;
+    const rootEl = root.current;
     lastReportedRef.current = "";
     initedRef.current = false;
     setFailed(false);
@@ -155,7 +212,8 @@ export function FoliateReader({
 
     // -------------------------------------------------------------------
     // iframe event relay (iframeEventHandlers.ts + usePagination.ts
-    // handlePageFlip, desktop subset — no touch/autoscroll/word-lens).
+    // handlePageFlip, desktop subset — no touch/autoscroll/word-lens; wheel
+    // events need no relay in scrolled flow, the renderer scrolls natively).
     // Events from inside the book iframe can't reach the shell, so handlers
     // on the section document postMessage to the window, where one message
     // listener routes them into the pagination funnel.
@@ -164,10 +222,6 @@ export function FoliateReader({
     let lastClickTime = 0;
     let longHoldTimeout = 0;
     let singleClickTimer = 0;
-    const doubleClickDisabled = false;
-    // wheelGesture.ts: one physical wheel gesture flips one page, its
-    // momentum tail is swallowed until the wheel goes idle.
-    const wheelDetector = createWheelGestureDetector();
 
     const postSingleClick = (event: MouseEvent) => {
       const element = event.target as HTMLElement | null;
@@ -191,7 +245,7 @@ export function FoliateReader({
 
     const relayClick = (event: MouseEvent) => {
       const now = Date.now();
-      if (!doubleClickDisabled && now - lastClickTime < DOUBLE_CLICK_INTERVAL_THRESHOLD_MS) {
+      if (now - lastClickTime < DOUBLE_CLICK_INTERVAL_THRESHOLD_MS) {
         lastClickTime = now;
         // second click of a double-click: swallow both (no viewer to open)
         window.clearTimeout(singleClickTimer);
@@ -222,18 +276,6 @@ export function FoliateReader({
     };
     const relayAuxclick = (event: MouseEvent) => {
       if (event.button === 3 || event.button === 4) event.preventDefault();
-    };
-    const relayWheel = (event: WheelEvent) => {
-      window.postMessage(
-        {
-          type: "iframe-wheel",
-          deltaX: event.deltaX,
-          deltaY: event.deltaY,
-          deltaMode: event.deltaMode,
-          ctrlKey: event.ctrlKey,
-        },
-        "*",
-      );
     };
 
     const relayKeydown = (event: KeyboardEvent) => {
@@ -291,27 +333,6 @@ export function FoliateReader({
         if (screenX >= centerStartX && screenX <= centerEndX) return;
         const side = screenX >= viewCenterX ? "right" : "left";
         viewPagination(v, viewSettings, side);
-      } else if (d.type === "iframe-wheel" && !viewSettings.scrolled) {
-        const deltaY = d.deltaY as number;
-        const deltaX = d.deltaX as number;
-        if (d.ctrlKey) {
-          // Pinch/ctrl-wheel zoom is not a page-turn gesture (readest wires
-          // it to its zoom controls; Segue has none — drop it either way).
-          wheelDetector.reset();
-          return;
-        }
-        // every gesture past the intent threshold is one turn attempt
-        const flip = wheelDetector.feed({
-          deltaX,
-          deltaY,
-          deltaMode: (d.deltaMode as number) ?? 0,
-          timeStamp: msg.timeStamp || performance.now(),
-        });
-        if (!flip) return;
-        if (flip.deltaY > 0) viewPagination(v, viewSettings, "down");
-        else if (flip.deltaY < 0) viewPagination(v, viewSettings, "up");
-        else if (flip.deltaX < 0) viewPagination(v, viewSettings, "left");
-        else if (flip.deltaX > 0) viewPagination(v, viewSettings, "right");
       } else if (d.type === "iframe-mouseup") {
         if (d.button === 3) void v.history.back();
         else if (d.button === 4) void v.history.forward();
@@ -324,7 +345,43 @@ export function FoliateReader({
         }
       }
     };
+    // Scrollbar drag from the pane (ReaderPane), rAF-coalesced. The target is
+    // a whole-book fraction — not a container offset, which stalls under a
+    // dragged thumb: the scrolled-mode container's height is a spine-size
+    // estimate that foliate rewrites as sections load/evict, with anchor
+    // corrections on top. Reflowable content resolves the fraction through
+    // SectionProgress (built from the same spine sizes view.js uses for
+    // relocate progress) and lets renderer.goTo handle loading and anchoring
+    // — renderer.goTo, not view.goToFraction, to skip its per-call history
+    // entry. Fixed layout maps the fraction onto the host's stable pixel
+    // range instead.
+    let pendingSeek: number | null = null;
+    let seekRaf: number | null = null;
+    const applySeek = () => {
+      seekRaf = null;
+      const v = viewRef.current;
+      const f = pendingSeek;
+      pendingSeek = null;
+      if (!v || typeof f !== "number") return;
+      if (v.isFixedLayout) {
+        const el = v.renderer;
+        const max = el.scrollHeight - el.clientHeight;
+        el.scrollTop = clamp01(f) * max;
+        return;
+      }
+      const progress = progressRef.current;
+      if (!progress) return;
+      const [index, anchor] = progress.getSection(clamp01(f));
+      void v.renderer.goTo({ index, anchor });
+    };
+    const onSeek = (e: Event) => {
+      const f = (e as CustomEvent<{ fraction?: number }>).detail?.fraction;
+      if (typeof f !== "number") return;
+      pendingSeek = f;
+      if (seekRaf == null) seekRaf = requestAnimationFrame(applySeek);
+    };
     window.addEventListener("message", onMessage);
+    window.addEventListener("segue-reader-seek", onSeek);
 
     // Page turns from the keyboard while focus is outside the book iframe.
     const onWindowKeydown = (e: KeyboardEvent) => {
@@ -351,25 +408,32 @@ export function FoliateReader({
     window.addEventListener("keydown", onWindowKeydown);
 
     // The scrolled flow scrolls inside the foliate renderers, not the pane.
-    // Relay those scrolls outward (bubbling CustomEvent) so the pane's
-    // position indicator keeps working. Capture phase: scroll doesn't bubble,
-    // the fxl strip scrolls on its own host element, and the paginator's
-    // container sits one shadow root deeper.
-    const reportScroll = (e: Event) => {
-      const el = e.target as HTMLElement | null;
-      if (!el || typeof el.scrollTop !== "number") return;
-      root.current?.dispatchEvent(
-        new CustomEvent("segue-reader-scroll", {
-          bubbles: true,
-          composed: true,
-          detail: {
-            scrollTop: el.scrollTop,
-            scrollHeight: el.scrollHeight,
-            clientHeight: el.clientHeight,
-          },
-        }),
-      );
+    // Relay those scrolls outward so the pane's scrollbar keeps up per-frame
+    // (relocates are debounced by the paginator and correct position as they
+    // arrive). Capture phase: scroll doesn't bubble, the fxl strip scrolls on
+    // its own host element, and the paginator's container sits one shadow
+    // root deeper. The event target is ignored on purpose — nested scrollables
+    // inside the book must not move the thumb; the container's geometry plus
+    // the stored fraction is the only truth.
+    const onScrollerScroll = () => reportMetrics();
+
+    // Hover-reveal for the scrollbar. The book iframes extend under the
+    // right-edge strip (the paginator's margins are iframe-internal padding),
+    // and iframe-internal pointer events never reach this document — so the
+    // strip is sensed from both surfaces: this root (UI overlays, the fxl
+    // host background) and each section document (book surface, relayed with
+    // its iframe offset). Only boundary crossings are reported to the pane
+    // ("segue-reader-zone").
+    let zoneIn = false;
+    const updateZone = (clientX: number) => {
+      if (!rootEl) return;
+      const inZone = clientX >= rootEl.getBoundingClientRect().right - 14;
+      if (inZone === zoneIn) return;
+      zoneIn = inZone;
+      window.dispatchEvent(new CustomEvent("segue-reader-zone", { detail: { inZone } }));
     };
+    const onRootPointerMove = (e: PointerEvent) => updateZone(e.clientX);
+    rootEl?.addEventListener("pointermove", onRootPointerMove);
 
     // FoliateViewer.tsx docLoadHandler: per-section DOM fixups, then the
     // relay listeners (once per document).
@@ -384,7 +448,7 @@ export function FoliateReader({
 
       // A vertical section flips the measure and the reading direction.
       const writingDir = getDirection(sectionDoc);
-      const newRtl = getPageProgressionRTL("auto", v.book.dir, writingDir.rtl);
+      const newRtl = getPageProgressionRTL(v.book.dir, writingDir.rtl);
       if (settings.vertical !== writingDir.vertical || settings.rtl !== newRtl) {
         settings.vertical = writingDir.vertical;
         settings.rtl = newRtl;
@@ -398,8 +462,6 @@ export function FoliateReader({
       if (!fixed) mountBookFonts(sectionDoc, isCJKLang(langOf(v.book)) || isCJKEnv());
       if (fixed) applyFixedlayoutStyles(sectionDoc, kind === "pdf" ? "PDF" : "EPUB");
       applyImageStyle(sectionDoc);
-      applyThemeModeClass(sectionDoc);
-      applyScrollModeClass(sectionDoc, settings.scrolled);
       keepTextAlignment(sectionDoc);
 
       // Selection capture (Segue shell): the toolbar lives below the reader,
@@ -431,10 +493,16 @@ export function FoliateReader({
         sectionDoc.addEventListener("mouseup", relayMouseup);
         sectionDoc.addEventListener("auxclick", relayAuxclick);
         sectionDoc.addEventListener("click", relayClick);
-        sectionDoc.addEventListener("wheel", relayWheel, { passive: true });
         sectionDoc.addEventListener("keydown", relayKeydown);
         sectionDoc.addEventListener("dragover", relayDragover);
         sectionDoc.addEventListener("drop", relayDrop);
+        // Book-surface half of the scrollbar hover-reveal: translate the
+        // iframe-space X into page space (the frame element lives in this
+        // document) and feed the same zone sensor.
+        sectionDoc.addEventListener("pointermove", (e) => {
+          const frame = sectionDoc.defaultView?.frameElement;
+          if (frame) updateZone(frame.getBoundingClientRect().left + e.clientX);
+        });
       }
     };
 
@@ -466,6 +534,9 @@ export function FoliateReader({
         // the cover keeping its natural spread.
         const rendition = book.rendition;
         const fixed = rendition?.layout === "pre-paginated";
+        // Same construction as view.js: the spine-size-weighted fraction axis
+        // the scrollbar drags along (reflowable only).
+        progressRef.current = fixed ? null : new SectionProgress(book.sections, 1500, 1600);
         if (rendition && fixed) {
           rendition.spread = "auto";
           const cover = book.sections[0];
@@ -474,8 +545,8 @@ export function FoliateReader({
 
         await view.open(book);
         if (cancelled) return;
-        view.shadowRoot?.addEventListener("scroll", reportScroll, true);
-        view.renderer.shadowRoot?.addEventListener("scroll", reportScroll, true);
+        view.shadowRoot?.addEventListener("scroll", onScrollerScroll, true);
+        view.renderer.shadowRoot?.addEventListener("scroll", onScrollerScroll, true);
 
         // Arm the drop relays on every section document as its iframe appears.
         // The scrolled-flow paginator loads sections into lazily created
@@ -525,7 +596,6 @@ export function FoliateReader({
                   window.innerWidth,
                   window.innerHeight,
                   settings.vertical,
-                  false,
                 )
               : transformInlineStyles(
                   String(data),
@@ -575,14 +645,18 @@ export function FoliateReader({
     return () => {
       cancelled = true;
       window.removeEventListener("message", onMessage);
+      window.removeEventListener("segue-reader-seek", onSeek);
       window.removeEventListener("keydown", onWindowKeydown);
+      rootEl?.removeEventListener("pointermove", onRootPointerMove);
+      if (seekRaf != null) cancelAnimationFrame(seekRaf);
+      progressRef.current = null;
       dropRelayObserver?.disconnect();
       window.clearTimeout(singleClickTimer);
       window.clearTimeout(relocateTimer.current);
       if (relocateRaf.current != null) cancelAnimationFrame(relocateRaf.current);
       if (view) {
-        view.shadowRoot?.removeEventListener("scroll", reportScroll, true);
-        view.renderer.shadowRoot?.removeEventListener("scroll", reportScroll, true);
+        view.shadowRoot?.removeEventListener("scroll", onScrollerScroll, true);
+        view.renderer.shadowRoot?.removeEventListener("scroll", onScrollerScroll, true);
         view.close();
         view.remove();
       }

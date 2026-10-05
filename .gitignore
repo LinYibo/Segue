@@ -3,11 +3,6 @@ dist/
 .env
 *.log
 
-# reference repo clones (read-only upstream sources)
-sumatrapdf/
-anx-reader/
-readest/
-
 # CDP debug artifacts and session workspace
 out/
 .zcode/

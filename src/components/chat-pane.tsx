@@ -5,6 +5,10 @@ import { useSegue } from "@/lib/store";
 import type { ChatMessage, Citation } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+// Stable empty list so a missing active thread doesn't churn the scroll
+// effect's dependencies.
+const NO_MESSAGES: ChatMessage[] = [];
+
 export function ChatPane() {
   const threads = useSegue((s) => s.threads);
   const chatTabs = useSegue((s) => s.chatTabs);
@@ -19,7 +23,7 @@ export function ChatPane() {
   const [value, setValue] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
   const thread = threads.find((t) => t.id === activeThreadId);
-  const messages = thread?.messages ?? [];
+  const messages = thread ? thread.messages : NO_MESSAGES;
 
   useEffect(() => {
     const el = listRef.current;
@@ -147,7 +151,6 @@ export function ChatPane() {
                 : "AI is not configured — add a provider below"
             }
             disabled={!aiAvailable || streaming}
-            suppressHydrationWarning
             className="block w-full resize-none bg-transparent px-1 pt-1 text-sm leading-6 text-fg outline-none placeholder:text-faint disabled:opacity-50"
           />
           <div className="mt-1 flex items-center justify-between px-1">

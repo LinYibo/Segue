@@ -49,7 +49,6 @@ function ImportButton() {
         accept=".pdf,.epub,application/pdf,application/epub+zip"
         multiple
         className="hidden"
-        suppressHydrationWarning
         onChange={(e) => {
           if (e.target.files) void importFiles(e.target.files);
           e.target.value = "";

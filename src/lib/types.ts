@@ -51,19 +51,14 @@ export type DocMeta = {
   addedAt: number;
   lastOpenedAt: number;
   size: number;
-  pageCount?: number;
-  progress: number;
   lastLocator: string;
-  excerpt: string;
 };
 
 export type Section = {
   locator: string;
   heading: string;
   text: string;
-  html?: string;
   src?: string;
-  page?: number;
   // The section-level CFI (EPUB spine CFI; PDF's synthetic per-page one) —
   // maps a reading-position CFI back to its section (longest prefix wins).
   cfi?: string;
@@ -74,8 +69,7 @@ export type ParsedDoc = {
   author: string;
   kind: DocKind;
   sections: Section[];
-  pageCount?: number;
-  outline?: OutlineItem[];
+  outline: OutlineItem[];
 };
 
 export type Chunk = {
@@ -139,18 +133,8 @@ export type Excerpt = {
   text: string;
 };
 
-export type StoredFile = {
-  docId: string;
-  name: string;
-  mime: string;
-  bytes: ArrayBuffer;
-};
-
 export type OutlineItem = {
   locator: string;
   heading: string;
   level: number;
-  // Destination page when known (EPUB ToC entry): outline tracking follows the
-  // reading position SumatraPDF-style, the last entry at-or-before the page.
-  page?: number;
 };

@@ -1,4 +1,4 @@
-/** System prompts and the agent tool set shared by the web and desktop shells. */
+/** System prompts and the agent tool set for the desktop shell's ask mode. */
 
 export const AGENT_TOOLS = [
   {

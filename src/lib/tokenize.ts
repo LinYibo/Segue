@@ -41,7 +41,6 @@ const STOP = new Set([
   "about",
   "over",
   "such",
-  "the",
 ]);
 
 export function tokenize(text: string): string[] {

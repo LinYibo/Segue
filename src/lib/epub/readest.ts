@@ -7,18 +7,17 @@
 // no custom fonts, no translation/e-ink features. The emitted CSS therefore
 // matches readest's light-desktop output.
 
+// vertical/rtl are the only runtime-variable knobs — the reader overwrites
+// them per section from the book's writing direction (getDirection).
 export type EpubViewSettings = {
   marginTopPx: number;
   marginRightPx: number;
   marginBottomPx: number;
   marginLeftPx: number;
   gapPercent: number;
-  columnGapPx: number;
-  scrolled: boolean;
   maxColumnCount: number;
   maxInlineSize: number;
   maxBlockSize: number;
-  animated: boolean;
   vertical: boolean;
   rtl: boolean;
   serifFont: string;
@@ -36,27 +35,21 @@ export type EpubViewSettings = {
   textIndent: number;
   fullJustification: boolean;
   hyphenation: boolean;
-  overrideFont: boolean;
-  overrideLayout: boolean;
-  overrideColor: boolean;
-  zoomLevel: number;
 };
 
-// Desktop defaults (services/constants.ts DEFAULT_BOOK_FONT/LAYOUT/STYLE +
-// DEFAULT_VIEW_CONFIG.animated=false); the CJK book overrides mirror
-// DEFAULT_CJK_VIEW_SETTINGS.
+// Desktop defaults (services/constants.ts DEFAULT_BOOK_FONT/LAYOUT/STYLE);
+// the CJK book overrides mirror DEFAULT_CJK_VIEW_SETTINGS. Segue's fixed
+// configuration substitutes readest's settings store: light theme only,
+// scrolled flow only, no custom fonts, no font/layout/color overrides.
 export const makeEpubViewSettings = (isCJK: boolean): EpubViewSettings => ({
   marginTopPx: 44,
   marginRightPx: 16,
   marginBottomPx: 44,
   marginLeftPx: 16,
   gapPercent: 5,
-  columnGapPx: 0,
-  scrolled: true,
   maxColumnCount: 2,
   maxInlineSize: getDefaultMaxInlineSize(),
   maxBlockSize: getDefaultMaxBlockSize(),
-  animated: false,
   vertical: false,
   rtl: false,
   serifFont: "Bitter",
@@ -74,21 +67,17 @@ export const makeEpubViewSettings = (isCJK: boolean): EpubViewSettings => ({
   textIndent: isCJK ? 2 : 0,
   fullJustification: true,
   hyphenation: true,
-  overrideFont: false,
-  overrideLayout: false,
-  overrideColor: false,
-  zoomLevel: 100,
 });
 
 // utils/misc.ts isCJKEnv — readest mounts the CJK webfonts and applies the
 // CJK typography defaults for CJK locales, even when the book declares no
 // language (settingsService.ts merges DEFAULT_CJK_VIEW_SETTINGS on this).
 export const isCJKEnv = (): boolean =>
-  ["zh", "ja", "ko"].some((lang) => (navigator.language || "").startsWith(lang));
+  ["zh", "ja", "ko"].some((lang) => navigator.language.startsWith(lang));
 
 export const isCJKLang = (lang: string | null | undefined): boolean => {
   if (!lang) return false;
-  const normalized = String(lang).toLowerCase().split(/[-_]/)[0] ?? "";
+  const normalized = String(lang).toLowerCase().split(/[-_]/)[0]!;
   return ["zh", "ja", "ko", "zho", "jpn", "kor"].includes(normalized);
 };
 
@@ -267,12 +256,6 @@ const getFontStyles = (s: EpubViewSettings) => {
   const fontSize = s.defaultFontSize;
   const minFontSize = s.minimumFontSize;
   const fontWeight = s.fontWeight;
-  const overrideFont = s.overrideFont;
-  const bodyFontSizeOverride = `
-    p, li, div, pre, dd {
-      font-size: max(1rem, var(--min-font-size, 8px)) !important;
-    }
-  `;
   return `
     html {
       --serif: ${families.serif};
@@ -289,10 +272,7 @@ const getFontStyles = (s: EpubViewSettings) => {
       text-size-adjust: none;
     }
     :where(html) {
-      font-family: var(${defaultFontFamily}) ${overrideFont ? "!important" : ""};
-    }
-    html body {
-      ${overrideFont ? `font-family: var(${defaultFontFamily}) !important;` : ""}
+      font-family: var(${defaultFontFamily});
     }
     font[size="1"] {
       font-size: ${minFontSize}px;
@@ -318,20 +298,12 @@ const getFontStyles = (s: EpubViewSettings) => {
     [style*="font-size: 16px"], [style*="font-size:16px"] {
       font-size: 1rem !important;
     }
-    ${overrideFont ? "html body :is(pre, code, kbd)" : ":where(pre, code, kbd)"} {
-      font-family: var(--monospace) ${overrideFont ? "!important" : ""};
+    :where(pre, code, kbd) {
+      font-family: var(--monospace);
       font-variant-ligatures: none;
     }
-    body *:not(pre, code, kbd, .code):not(pre *, code *, kbd *, .code *) {
-      ${overrideFont ? "font-family: revert !important;" : ""}
-    }
-    ${overrideFont ? bodyFontSizeOverride : ""}
   `;
 };
-
-const LINK_TOUCH_HOLD_CLASS = "link-touch-hold";
-const SCROLL_WRAPPER_CLASS = "scroll-wrapper";
-const SCROLL_WRAPPER_FIT_CLASS = "scroll-wrapper-fit";
 
 const getPageLayoutStyles = (s: EpubViewSettings) => `
   html {
@@ -347,16 +319,12 @@ const getPageLayoutStyles = (s: EpubViewSettings) => `
   }
   body {
     overflow: unset;
-    zoom: ${(s.zoomLevel || 100) / 100};
     padding: unset;
     margin: unset;
   }
   img {
     -webkit-touch-callout: none;
     -webkit-user-drag: none;
-  }
-  html.${LINK_TOUCH_HOLD_CLASS} a[href] {
-    pointer-events: none !important;
   }
   svg:where(:not([width])), img:where(:not([width])) {
     width: auto;
@@ -376,24 +344,6 @@ const getPageLayoutStyles = (s: EpubViewSettings) => `
     inset: -10px;
   }
 
-  .${SCROLL_WRAPPER_CLASS} {
-    display: block;
-    overflow: auto;
-    max-width: 100%;
-    touch-action: pan-x pan-y;
-    scrollbar-width: thin;
-    -webkit-overflow-scrolling: touch;
-  }
-  .${SCROLL_WRAPPER_FIT_CLASS} {
-    overflow: visible;
-  }
-  .${SCROLL_WRAPPER_CLASS} > table {
-    display: table !important;
-    max-width: 100%;
-  }
-  body.paginated-mode .${SCROLL_WRAPPER_CLASS}:not(.${SCROLL_WRAPPER_FIT_CLASS}) {
-    max-height: calc(var(--available-height) * 1px);
-  }
   pre, code {
     white-space: pre-wrap !important;
     scrollbar-width: none;
@@ -430,10 +380,6 @@ const getPageLayoutStyles = (s: EpubViewSettings) => `
 
   div:has(> img, > svg) {
     max-width: 100% !important;
-  }
-
-  body.paginated-mode td:has(img), body.paginated-mode td :has(img) {
-    max-height: calc(var(--available-height) * 0.8 * 1px);
   }
 
   figure.code {
@@ -475,13 +421,6 @@ const getPageLayoutStyles = (s: EpubViewSettings) => `
     width: unset !important;
   }
 
-  body.paginated-mode div[style*="page-break-after: always"],
-  body.paginated-mode div[style*="page-break-after:always"],
-  body.paginated-mode p[style*="page-break-after: always"],
-  body.paginated-mode p[style*="page-break-after:always"] {
-    margin-bottom: calc(var(--available-height) * 1px);
-  }
-
   .br {
     display: flow-root;
   }
@@ -509,8 +448,6 @@ const INLINE_FORMATTING_SELECTOR = [
 ].join(", ");
 
 const getParagraphLayoutStyles = (s: EpubViewSettings) => {
-  const overrideLayout = s.overrideLayout;
-  const important = overrideLayout ? " !important" : "";
   const vertical = s.vertical;
   return `
   html {
@@ -535,12 +472,12 @@ const getParagraphLayoutStyles = (s: EpubViewSettings) => {
       hyphens: unset;
   }
   p, blockquote, dd, div:not(:has(*:not(${INLINE_FORMATTING_SELECTOR}))) {
-    line-height: ${s.lineHeight}${important};
-    word-spacing: ${s.wordSpacing}px${important};
-    letter-spacing: ${s.letterSpacing}px${important};
-    text-indent: ${s.textIndent}em${important};
-    -webkit-hyphens: ${s.hyphenation ? "auto" : "manual"}${important};
-    hyphens: ${s.hyphenation ? "auto" : "manual"}${important};
+    line-height: ${s.lineHeight};
+    word-spacing: ${s.wordSpacing}px;
+    letter-spacing: ${s.letterSpacing}px;
+    text-indent: ${s.textIndent}em;
+    -webkit-hyphens: ${s.hyphenation ? "auto" : "manual"};
+    hyphens: ${s.hyphenation ? "auto" : "manual"};
     -webkit-hyphenate-limit-before: 3;
     -webkit-hyphenate-limit-after: 2;
     -webkit-hyphenate-limit-lines: 2;
@@ -548,25 +485,17 @@ const getParagraphLayoutStyles = (s: EpubViewSettings) => {
     widows: 2;
   }
   li {
-    line-height: ${s.lineHeight}${important};
-    -webkit-hyphens: ${s.hyphenation ? "auto" : "manual"}${important};
-    hyphens: ${s.hyphenation ? "auto" : "manual"}${important};
+    line-height: ${s.lineHeight};
+    -webkit-hyphens: ${s.hyphenation ? "auto" : "manual"};
+    hyphens: ${s.hyphenation ? "auto" : "manual"};
   }
   p.aligned-center, blockquote.aligned-center,
   dd.aligned-center, div.aligned-center {
-    text-align: center${important};
-  }
-  p.aligned-left, blockquote.aligned-left,
-  dd.aligned-left, div.aligned-left {
-    ${s.fullJustification && overrideLayout ? "text-align: justify !important;" : ""}
+    text-align: center;
   }
   p.aligned-right, blockquote.aligned-right,
   dd.aligned-right, div.aligned-right {
-    text-align: right${important};
-  }
-  p.aligned-justify, blockquote.aligned-justify,
-  dd.aligned-justify, div.aligned-justify {
-    ${!s.fullJustification && overrideLayout ? "text-align: initial !important;" : ""}
+    text-align: right;
   }
   p:has(> img:only-child), p:has(> span:only-child > img:only-child),
   p:has(> a:only-child > img:only-child),
@@ -583,20 +512,14 @@ const getParagraphLayoutStyles = (s: EpubViewSettings) => {
     text-indent: initial !important;
   }
   p {
-    ${vertical ? `margin-left: ${s.paragraphMargin}em${important};` : ""}
-    ${vertical ? `margin-right: ${s.paragraphMargin}em${important};` : ""}
-    ${vertical ? `margin-top: unset${important};` : ""}
-    ${vertical ? `margin-bottom: unset${important};` : ""}
-    ${!vertical ? `margin-top: ${s.paragraphMargin}em${important};` : ""}
-    ${!vertical ? `margin-bottom: ${s.paragraphMargin}em${important};` : ""}
-    ${!vertical ? `margin-left: unset${important};` : ""}
-    ${!vertical ? `margin-right: unset${important};` : ""}
-  }
-  div {
-    ${vertical && overrideLayout ? `margin-left: ${s.paragraphMargin}em !important;` : ""}
-    ${vertical && overrideLayout ? `margin-right: ${s.paragraphMargin}em !important;` : ""}
-    ${!vertical && overrideLayout ? `margin-top: ${s.paragraphMargin}em !important;` : ""}
-    ${!vertical && overrideLayout ? `margin-bottom: ${s.paragraphMargin}em !important;` : ""}
+    ${vertical ? `margin-left: ${s.paragraphMargin}em;` : ""}
+    ${vertical ? `margin-right: ${s.paragraphMargin}em;` : ""}
+    ${vertical ? "margin-top: unset;" : ""}
+    ${vertical ? "margin-bottom: unset;" : ""}
+    ${!vertical ? `margin-top: ${s.paragraphMargin}em;` : ""}
+    ${!vertical ? `margin-bottom: ${s.paragraphMargin}em;` : ""}
+    ${!vertical ? "margin-left: unset;" : ""}
+    ${!vertical ? "margin-right: unset;" : ""}
   }
   p > font:only-child {
     display: flow-root;
@@ -620,22 +543,22 @@ const getParagraphLayoutStyles = (s: EpubViewSettings) => {
     ${vertical ? "vertical-align: unset;" : ""}
   }
 
+
   .nonindent, .noindent {
     text-indent: unset !important;
   }
 `;
 };
 
-const getColorStyles = (s: EpubViewSettings) => {
-  // Segue is always light with no color override — the dark/eink/override
-  // branches of readest's getColorStyles all compile away.
+const getColorStyles = () => {
+  // Segue is always light — the dark/eink/override branches of readest's
+  // getColorStyles all compile away.
   const { bg, fg } = THEME;
   return `
     html {
       --theme-bg-color: ${bg};
       --theme-fg-color: ${fg};
       --theme-primary-color: ${THEME.primary};
-      --override-color: ${s.overrideColor};
       color-scheme: light;
     }
     html, body {
@@ -648,23 +571,8 @@ const getColorStyles = (s: EpubViewSettings) => {
       background-color: var(--theme-bg-color, transparent);
       background: var(--background-set, none);
     }
-    section, aside, blockquote, article, nav, header, footer, main, figure,
-    div, p, font, h1, h2, h3, h4, h5, h6, li, span {
-      ${s.overrideColor ? `background-color: ${bg} !important;` : ""}
-      ${s.overrideColor ? `color: ${fg} !important;` : ""}
-      ${s.overrideColor ? `border-color: ${fg} !important;` : ""}
-    }
-    pre, span {
-      ${s.overrideColor ? `background-color: ${bg} !important;` : ""}
-    }
     a:any-link {
       text-decoration: none;
-    }
-    img {
-      ${s.overrideColor ? "mix-blend-mode: multiply;" : ""}
-    }
-    svg, img {
-      ${s.overrideColor ? `background-color: transparent !important;` : ""}
     }
     *:has(> hr.background-img):not(body) {
       background-color: ${bg};
@@ -674,9 +582,6 @@ const getColorStyles = (s: EpubViewSettings) => {
     }
     p[width][height] > img:only-child {
       mix-blend-mode: multiply;
-    }
-    *:has(> img.has-text-siblings):not(body) {
-      ${s.overrideColor ? `background-color: ${bg};` : ""}
     }
     p img.has-text-siblings, span img.has-text-siblings, sup img.has-text-siblings {
       mix-blend-mode: multiply;
@@ -714,7 +619,7 @@ const getColorStyles = (s: EpubViewSettings) => {
 
 export const getStyles = (s: EpubViewSettings): string => {
   const epubNamespace = `@namespace epub "http://www.idpf.org/2007/ops";`;
-  return `${epubNamespace}\n${getPageLayoutStyles(s)}\n${getParagraphLayoutStyles(s)}\n${getFontStyles(s)}\n${getColorStyles(s)}`;
+  return `${epubNamespace}\n${getPageLayoutStyles(s)}\n${getParagraphLayoutStyles(s)}\n${getFontStyles(s)}\n${getColorStyles()}`;
 };
 
 // ---------------------------------------------------------------------------
@@ -744,10 +649,7 @@ export const transformStylesheet = (
   vw: number,
   vh: number,
   vertical: boolean,
-  isFixedLayout = false,
 ): string => {
-  if (isFixedLayout) return css;
-
   const isInlineStyle = !css.includes("{");
   const ruleRegex = /([^{]+)({[^}]+})/g;
   css = css.replace(ruleRegex, (match, selector, block) => {
@@ -1001,18 +903,8 @@ export const transformStylesheet = (
 };
 
 // ---------------------------------------------------------------------------
-// Per-document fixups (utils/style.ts apply* helpers + theme/scroll classes)
+// Per-document fixups (utils/style.ts apply* helpers)
 // ---------------------------------------------------------------------------
-
-export const applyThemeModeClass = (doc: Document): void => {
-  doc.body.classList.remove("theme-light", "theme-dark");
-  doc.body.classList.add("theme-light");
-};
-
-export const applyScrollModeClass = (doc: Document, scrolled: boolean): void => {
-  doc.body.classList.remove("scroll-mode", "paginated-mode");
-  doc.body.classList.add(scrolled ? "scroll-mode" : "paginated-mode");
-};
 
 const PREFIXED_ATTR_REGEX = /^([A-Za-z_][\w.-]*):([A-Za-z_][\w.-]*)$/;
 const EPUB_OPS_NAMESPACE = "http://www.idpf.org/2007/ops";
@@ -1150,19 +1042,14 @@ export const getDirection = (doc: Document): { vertical: boolean; rtl: boolean }
   return { vertical, rtl };
 };
 
-// libs/document.ts getPageProgressionRTL
+// libs/document.ts getPageProgressionRTL — the writing-mode branch is gone:
+// the reader always passes "auto" (the per-section direction is resolved
+// separately by getDirection).
 export const getPageProgressionRTL = (
-  writingMode: string,
   bookDir: string | undefined,
   documentRtl: boolean,
 ): boolean =>
-  writingMode.includes("rl")
-    ? true
-    : bookDir === "rtl"
-      ? true
-      : bookDir === "ltr"
-        ? false
-        : documentRtl;
+  bookDir === "rtl" ? true : bookDir === "ltr" ? false : documentRtl;
 
 // ---------------------------------------------------------------------------
 // Fixed-layout section docs (utils/style.ts applyFixedlayoutStyles) — Segue is

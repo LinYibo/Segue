@@ -10,7 +10,7 @@ open book with tools when the initial excerpts are thin.
 ## Architecture
 
 - **Renderer:** Vite + React 19 SPA, Tailwind CSS v4, zustand, pdfjs-dist,
-  JSZip, IndexedDB. Retrieval is fully client-side and **per-book**: chunking +
+  IndexedDB. Retrieval is fully client-side and **per-book**: chunking +
   tokenizer (Latin + CJK bigrams) + BM25 over the open document's chunks only —
   there is no cross-book index. No router — single-page workbench.
 - **Main process** (`electron/main.mjs`, plain JS, no bundling): creates the
@@ -62,7 +62,7 @@ src/lib/parse/        foliate-based parsing (PDF pages / EPUB spine)
 src/foliate-js/       vendored readest/foliate-js fork (parsing + reading both formats)
 public/vendor/pdfjs/  pdf.js worker, cmaps, standard fonts, wasm decoders
 src/lib/bm25.ts       BM25 search over one book's chunks (client-side)
-src/lib/ai/           client.ts (IPC chat client), status.ts
+src/lib/ai/           client.ts (IPC chat client + window.electronAPI types)
 electron/main.mjs     window, loadFile/loadURL, IPC (ai:status / settings / ai:chat)
 electron/preload.cjs  contextBridge → window.electronAPI
 electron/providers.mjs  presets + protocol registry (plain JS)
@@ -75,5 +75,4 @@ scripts/dev.mjs       dev orchestrator: Vite + Electron
 
 Originally exported from Grok App Builder (TanStack Start + Nitro + platform
 services), refactored to plain Vite + React (2026-09-26), then to an
-Electron-only desktop app the same day. Pre-refactor snapshots are in git
-history.
+Electron-only desktop app the same day.

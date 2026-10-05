@@ -69,7 +69,7 @@ async function parsePdfBook(book: FoliateBook): Promise<ParsedDoc> {
   const walk = (items: FoliateTocItem[] | null | undefined, level: number) => {
     for (const item of items ?? []) {
       const page = tocItemPage(item);
-      if (page) outline.push({ locator: `p.${page}`, heading: item.label?.trim() ?? "", level, page });
+      if (page) outline.push({ locator: `p.${page}`, heading: item.label?.trim() ?? "", level });
       walk(item.subitems, level + 1);
     }
   };
@@ -80,14 +80,13 @@ async function parsePdfBook(book: FoliateBook): Promise<ParsedDoc> {
     author: contributorText(book.metadata?.author),
     kind: "pdf",
     sections,
-    pageCount: book.sections.length,
     outline,
   };
 }
 
 // The fork's makeTOCItem resolves each outline destination to its page index.
 function tocItemPage(item: FoliateTocItem): number | null {
-  const index = (item as FoliateTocItem & { index?: number }).index;
+  const index = item.index;
   return typeof index === "number" && index >= 0 ? index + 1 : null;
 }
 
@@ -199,7 +198,6 @@ export async function findQuoteCfi(
 ): Promise<string | null> {
   for (const i of order) {
     const section = book.sections[i];
-    if (!section) continue;
     try {
       const doc = await section.createDocument();
       const range = findQuoteRange(doc, quote);
@@ -233,9 +231,9 @@ const canonChar = (ch: string): string => {
 function findQuoteRange(doc: Document, quote: string): Range | null {
   const q = [...quote.replace(/\s+/g, " ").trim()].map(canonChar).join("");
   if (q.length < 2) return null;
-  // XHTML sections parse as XML documents, which have no .body property
-  const root = doc.body ?? doc.getElementsByTagName("body")[0] ?? doc.documentElement;
-  if (!root) return null;
+  // XHTML sections parse as XML documents, which have no .body property —
+  // documentElement covers those.
+  const root = doc.body ?? doc.documentElement;
 
   const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   let norm = "";
@@ -345,8 +343,7 @@ const BLOCK_TAGS = new Set([
 ]);
 
 function extractText(doc: Document): string {
-  const root = doc.body ?? doc.getElementsByTagName("body")[0] ?? doc.documentElement;
-  if (!root) return "";
+  const root = doc.body ?? doc.documentElement;
   const out: string[] = [];
   const walk = (node: Node) => {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -369,8 +366,7 @@ function extractText(doc: Document): string {
 }
 
 function firstHeading(doc: Document): string {
-  const root = doc.body ?? doc.getElementsByTagName("body")[0] ?? doc.documentElement;
-  if (!root) return "";
+  const root = doc.body ?? doc.documentElement;
   const h = root.querySelector("h1,h2,h3,h4,h5,h6");
   return (h?.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
 }

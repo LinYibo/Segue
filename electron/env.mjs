@@ -3,9 +3,8 @@ import { join } from "node:path";
 
 /**
  * Load `.env` from the project root into process.env (first write wins — real
- * environment variables always take precedence). Used by the Vite dev config
- * and the Electron main process so API keys (XAI_API_KEY etc.) can live in a
- * local .env file everywhere.
+ * environment variables always take precedence), so API keys (XAI_API_KEY
+ * etc.) can live in a local .env file for the Electron main process.
  */
 export function loadDotEnv() {
   const path = join(process.cwd(), ".env");

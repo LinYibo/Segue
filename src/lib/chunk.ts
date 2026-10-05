@@ -1,5 +1,4 @@
 import type { Chunk, OutlineItem, ParsedDoc, Section } from "./types";
-import { slugify } from "./utils";
 
 const TARGET = 900;
 const OVERLAP = 140;
@@ -33,20 +32,10 @@ export function outlineFromSections(sections: Section[]): OutlineItem[] {
   }));
 }
 
-export function headingLevel(locator: string, heading: string): number {
+function headingLevel(locator: string, heading: string): number {
   if (locator.startsWith("p.")) return 2;
   if (locator.startsWith("ch.")) return 1;
   return heading.length > 48 ? 3 : 2;
-}
-
-export function sectionLocator(
-  heading: string,
-  index: number,
-  kind: "pdf" | "epub",
-  page?: number,
-): string {
-  if (kind === "pdf" && page) return `p.${page}`;
-  return `ch.${index + 1}:${slugify(heading)}`;
 }
 
 function splitWindow(text: string, target: number, overlap: number): string[] {

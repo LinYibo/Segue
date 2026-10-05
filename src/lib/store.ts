@@ -253,8 +253,7 @@ export const useSegue = create<Store>((set, get) => ({
   },
 
   openDoc: (id, locator) => {
-    const doc = get().docs.find((d) => d.id === id);
-    if (!doc) return;
+    const doc = get().docs.find((d) => d.id === id)!;
     const loc = locator ?? doc.lastLocator ?? get().sections[id]?.[0]?.locator ?? "";
     const excerpt = sectionText(get(), id, loc);
     const docs = get().docs.map((d) =>
@@ -269,8 +268,7 @@ export const useSegue = create<Store>((set, get) => ({
       viewportExcerpt: excerpt,
       selection: null,
     });
-    const updated = docs.find((d) => d.id === id);
-    if (updated) void idbPut("docs", updated);
+    void idbPut("docs", docs.find((d) => d.id === id)!);
     void ensureDocLoaded(id);
   },
 
@@ -302,8 +300,8 @@ export const useSegue = create<Store>((set, get) => ({
       docs: next,
       viewportExcerpt: excerpt ?? sectionText(get(), activeDocId, locator),
     });
-    const updated = next.find((d) => d.id === activeDocId);
-    if (updated) void idbPut("docs", updated);
+    const updated = next.find((d) => d.id === activeDocId)!;
+    void idbPut("docs", updated);
   },
 
   setSelection: (selection) => set({ selection }),
@@ -333,10 +331,7 @@ export const useSegue = create<Store>((set, get) => ({
           addedAt: Date.now(),
           lastOpenedAt: Date.now(),
           size: file.size,
-          pageCount: parsed.pageCount,
-          progress: 0,
           lastLocator: parsed.sections[0]?.locator ?? "",
-          excerpt: parsed.sections[0]?.text.slice(0, 180) ?? "",
         };
         const newChunks = chunkParsed(id, parsed);
         await idbPut("docs", doc);
@@ -345,7 +340,7 @@ export const useSegue = create<Store>((set, get) => ({
           docs: [doc, ...s.docs],
           chunks: { ...s.chunks, [id]: newChunks },
           sections: { ...s.sections, [id]: parsed.sections },
-          outlines: { ...s.outlines, [id]: parsed.outline ?? [] },
+          outlines: { ...s.outlines, [id]: parsed.outline },
           fileCache: { [id]: bytes },
           openTabs: [...s.openTabs, id],
           activeDocId: id,
@@ -453,7 +448,7 @@ export const useSegue = create<Store>((set, get) => ({
       return;
     }
     const nextActive =
-      activeThreadId === id ? (rest[Math.min(idx, rest.length - 1)] ?? null) : activeThreadId;
+      activeThreadId === id ? rest[Math.min(idx, rest.length - 1)]! : activeThreadId;
     set({ chatTabs: rest, activeThreadId: nextActive, threads: restThreads });
     persistChatTabs(rest, nextActive);
   },
@@ -463,17 +458,10 @@ export const useSegue = create<Store>((set, get) => ({
     if (!trimmed || get().streaming) return;
     const { activeDocId, chunks, docs, sections, selection, viewportExcerpt, activeLocator } =
       get();
-    let thread = get().threads.find((t) => t.id === get().activeThreadId);
-    if (!thread) {
-      const t = newThread();
-      thread = t;
-      set((s) => ({
-        threads: [...s.threads, t],
-        chatTabs: [...s.chatTabs, t.id],
-        activeThreadId: t.id,
-      }));
-      persistChatTabs(get().chatTabs, t.id);
-    }
+    // The tab bar never empties (closeChatTab respawns), so the active
+    // thread always resolves.
+    const thread = get().threads.find((t) => t.id === get().activeThreadId)!;
+    const baseMessages = thread.messages;
 
     const userMsg: ChatMessage = {
       id: uid("msg"),
@@ -488,14 +476,14 @@ export const useSegue = create<Store>((set, get) => ({
       content: "",
       createdAt: Date.now(),
     };
-    thread = {
+    const updatedThread: Thread = {
       ...thread,
-      title: thread.messages.length === 0 ? trimmed.slice(0, 48) : thread.title,
-      messages: [...thread.messages, userMsg, asstMsg],
+      title: baseMessages.length === 0 ? trimmed.slice(0, 48) : thread.title,
+      messages: [...baseMessages, userMsg, asstMsg],
       updatedAt: Date.now(),
     };
     set((s) => ({
-      threads: s.threads.map((t) => (t.id === thread!.id ? thread! : t)),
+      threads: s.threads.map((t) => (t.id === updatedThread.id ? updatedThread : t)),
       streaming: true,
       // Direct flags, not setSidebarView: a send keeps the active thread
       // instead of landing on an untouched tab.
@@ -506,8 +494,8 @@ export const useSegue = create<Store>((set, get) => ({
     // IndexedDB the moment its first message is sent — a crash mid-stream
     // still leaves the conversation in the tab bar after a restart. The
     // empty assistant placeholder stays out of the draft.
-    if (thread.messages.length === 2) {
-      void idbPut("threads", { ...thread, messages: [userMsg] });
+    if (baseMessages.length === 0) {
+      void idbPut("threads", { ...updatedThread, messages: [userMsg] });
     }
 
     const query = selection?.text ? `${trimmed}\n\nSelection: ${selection.text}` : trimmed;
@@ -528,9 +516,10 @@ export const useSegue = create<Store>((set, get) => ({
         }
       : undefined;
 
-    const history: WireMessage[] = thread.messages
-      .filter((m) => m.id !== asstId)
-      .slice(-8)
+    // Wire history: the previous turns plus this one — the just-appended
+    // assistant placeholder stays out.
+    const history: WireMessage[] = baseMessages
+      .slice(-7)
       .map((m) => ({ role: m.role, content: m.content }));
     history.push({ role: "user", content: trimmed });
 
@@ -544,7 +533,7 @@ export const useSegue = create<Store>((set, get) => ({
         viewport,
         selection: selection?.text,
         asstId,
-        threadId: thread.id,
+        threadId: updatedThread.id,
         signal: abortCtl.signal,
         docs,
         chunks,
@@ -555,14 +544,14 @@ export const useSegue = create<Store>((set, get) => ({
       if ((err as { name?: string }).name === "AbortError") {
         /* stopped */
       } else {
-        patchAssistant(thread.id, asstId, (m) => ({
+        patchAssistant(updatedThread.id, asstId, (m) => ({
           ...m,
           content: m.content || (err instanceof Error ? err.message : "Something went wrong."),
         }));
       }
     } finally {
       set({ streaming: false });
-      const latest = get().threads.find((t) => t.id === thread!.id);
+      const latest = get().threads.find((t) => t.id === updatedThread.id);
       if (latest) void idbPut("threads", latest);
     }
   },
@@ -841,15 +830,14 @@ async function ensureDocLoaded(id: string) {
   const seq = ++loadSeq;
   useSegue.setState({ docLoadingId: id });
   try {
-    const doc = useSegue.getState().docs.find((d) => d.id === id);
-    if (!doc) return;
+    const doc = useSegue.getState().docs.find((d) => d.id === id)!;
     const bytes = await idbGetFile(id);
     if (!bytes) throw new Error(`File data missing for ${doc.title}`);
     if (!useSegue.getState().sections[id]) {
       const parsed = await parseDocument(doc.kind, bytes, doc.title);
       useSegue.setState((st) => ({
         sections: { ...st.sections, [id]: parsed.sections },
-        outlines: { ...st.outlines, [id]: parsed.outline ?? [] },
+        outlines: { ...st.outlines, [id]: parsed.outline },
         chunks: { ...st.chunks, [id]: chunkParsed(id, parsed) },
       }));
     }

@@ -188,10 +188,11 @@
 }
 
 /* In scrolled flow the foliate renderers scroll internally, and the native
-   scrollbar would overlap our own position indicator — Segue keeps the
-   indicator and hides the native one. The paginator's scroller exports
-   part=container (view.js exportparts); scrollbar-width does NOT inherit,
-   so the fixed-layout host gets its own rule injected by the reader. */
+   scrollbar would overlap our own overlay scrollbar — Segue keeps the
+   draggable thumb (ReaderPane) and hides the native one. The paginator's
+   scroller exports part=container (view.js exportparts); scrollbar-width
+   does NOT inherit, so the fixed-layout host gets its own rule injected by
+   the reader. */
 foliate-view::part(container) {
   scrollbar-width: none;
 }
