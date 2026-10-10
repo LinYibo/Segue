@@ -1,7 +1,8 @@
 {
-  // Static hosting for trysegue.com (same shape as GitTasks' `gittasks`
-  // worker): the vite build output served as Workers static assets, no
-  // script. `npm run deploy` after editing (vite build + wrangler deploy).
+  // Static hosting for trysegue.com: this config is what the Workers Builds
+  // deploy step (`npx wrangler deploy`) reads — a push to main builds the app
+  // and deploys dist/ as this worker's static assets, serving the custom
+  // domains trysegue.com + www. No manual deploy step exists.
   "name": "segue",
   "compatibility_date": "2026-10-01",
   "assets": {

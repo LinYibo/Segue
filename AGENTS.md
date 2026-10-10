@@ -9,11 +9,12 @@ architecture.
 
 - `npm run dev` — Vite dev server on :5173.
 - `npm run build` — static `dist/`.
-- `npm run deploy` — `vite build` + `wrangler deploy`: pushes `dist/` as
-  Workers static assets (worker `segue`, per `wrangler.jsonc`) to the account
-  that serves trysegue.com; `trysegue.com` + `www` are bound as Workers
-  custom domains. wrangler auth is the account's stored OAuth login
-  (wrangler login).
+- `npm run typecheck` / `lint` / `format`.
+- **Deploy = push to `main`.** The worker `segue` is connected to
+  `LinYibo/Segue` via Workers Builds (configured in the Cloudflare dashboard,
+  like worker `gittasks`): a push builds (`npm run build`) and deploys
+  `dist/` as static assets per `wrangler.jsonc` — no local deploy command.
+  `trysegue.com` + `www` are Workers custom domains on that worker.
 - `npm run typecheck` / `lint` / `format`.
 
 ## Layout

@@ -32,7 +32,9 @@ open book, a metadata-only library catalog, short thread history).
   storage-agnostic settings ops. Plain ESM with `.d.mts` type declarations —
   imported by renderer code through the `@shared` alias.
 - **Deployment**: `wrangler.jsonc` serves `dist/` as Cloudflare Workers
-  static assets (worker `segue`, custom domains `trysegue.com` + `www`).
+  static assets (worker `segue`, custom domains `trysegue.com` + `www`),
+  built and deployed automatically by Workers Builds on every push to
+  `main`.
 
 ## Getting started
 
@@ -40,8 +42,11 @@ open book, a metadata-only library catalog, short thread history).
 npm install
 npm run dev            # Vite dev server on :5173
 npm run build          # static dist/
-npm run deploy         # vite build + wrangler deploy → trysegue.com
 ```
+
+Deploying is just pushing to `main`: the worker `segue` is connected to this
+repo via Cloudflare Workers Builds, which runs the build and serves `dist/`
+as static assets on trysegue.com (config in `wrangler.jsonc`).
 
 AI is configured in-app via the rail's Settings view: pick a provider — xAI,
 DeepSeek, OpenRouter, Ollama, LM Studio, Anthropic, Google Gemini, or any
