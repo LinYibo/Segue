@@ -92,8 +92,8 @@ export function activeEntry(saved) {
 /** Merge one saved entry with its preset into a runtime config. Unknown
  * provider ids throw — settings are either app-written or hand-edited,
  * and hand-edited data should fail loudly. `env` supplies the preset env-var
- * fallback (process.env on the desktop, {} on the web — keys live in the
- * browser's localStorage there). */
+ * fallback ({}, since keys live in the browser's localStorage; hosts with an
+ * env store can pass process.env). */
 export function resolveEntry(entry, env = {}) {
   const preset = PROVIDER_PRESETS.find((p) => p.id === entry.provider);
   if (!preset) throw new Error(`Unknown provider "${entry.provider}"`);

@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { streamChat, type WireMessage } from "./ai/client";
 import { searchChunks } from "./bm25";
 import { chunkParsed, outlineFromSections } from "./chunk";
-import { host, isDesktop } from "./platform";
+import { host } from "./platform";
 import { idbDelete, idbDeleteByIndex, idbGetAll, idbGetFile, idbPut, idbPutFile } from "./idb";
 import { kindFromName, parseDocument } from "./parse";
 import { findQuoteCfi, getBook } from "./parse/foliate";
@@ -45,7 +45,6 @@ type Store = {
   sections: SectionsMap;
   outlines: OutlinesMap;
   activeDocId: string | null;
-  openTabs: string[];
   activeLocator: string;
   sidebarView: SidebarView;
   sidebarOpen: boolean;
@@ -68,7 +67,6 @@ type Store = {
   setRailOpen: (v: boolean) => void;
   closeSettings: () => void;
   openDoc: (id: string, locator?: string) => void;
-  closeTab: (id: string) => void;
   setLocator: (locator: string, excerpt?: string) => void;
   setSelection: (sel: Store["selection"]) => void;
   importFiles: (files: FileList | File[]) => Promise<void>;
@@ -120,7 +118,6 @@ export const useSegue = create<Store>((set, get) => ({
   sections: {},
   outlines: {},
   activeDocId: null,
-  openTabs: [],
   activeLocator: "",
   sidebarView: (localStorage.getItem("segue.sidebar.view") as SidebarView | null) ?? "library",
   sidebarOpen: localStorage.getItem("segue.sidebar.open") !== "false",
@@ -184,7 +181,6 @@ export const useSegue = create<Store>((set, get) => ({
         threads: threadList,
         chatTabs,
         activeDocId: storedDocs[0]?.id ?? null,
-        openTabs: storedDocs[0] ? [storedDocs[0].id] : [],
         activeLocator: storedDocs[0]?.lastLocator ?? "",
         activeThreadId,
         importProgress: null,
@@ -260,10 +256,8 @@ export const useSegue = create<Store>((set, get) => ({
     const docs = get().docs.map((d) =>
       d.id === id ? { ...d, lastOpenedAt: Date.now(), lastLocator: loc } : d,
     );
-    const openTabs = get().openTabs.includes(id) ? get().openTabs : [...get().openTabs, id];
     set({
       activeDocId: id,
-      openTabs,
       activeLocator: loc,
       docs,
       viewportExcerpt: excerpt,
@@ -271,22 +265,6 @@ export const useSegue = create<Store>((set, get) => ({
     });
     void idbPut("docs", docs.find((d) => d.id === id)!);
     void ensureDocLoaded(id);
-  },
-
-  closeTab: (id) => {
-    const { openTabs, activeDocId, docs } = get();
-    const idx = openTabs.indexOf(id);
-    if (idx === -1) return;
-    const nextTabs = openTabs.filter((t) => t !== id);
-    const nextId =
-      activeDocId === id ? (nextTabs[Math.min(idx, nextTabs.length - 1)] ?? null) : activeDocId;
-    set({
-      openTabs: nextTabs,
-      activeDocId: nextId,
-      activeLocator: nextId ? (docs.find((d) => d.id === nextId)?.lastLocator ?? "") : "",
-      selection: null,
-    });
-    if (nextId) void ensureDocLoaded(nextId);
   },
 
   setLocator: (locator, excerpt) => {
@@ -308,14 +286,11 @@ export const useSegue = create<Store>((set, get) => ({
   setSelection: (selection) => set({ selection }),
 
   importFiles: async (files) => {
-    // The web shell reads a single document at a time: importing replaces the
-    // current one (and its highlights); the desktop library accumulates.
-    let list = [...files];
-    if (!isDesktop()) {
-      list = list.slice(0, 1);
-      const current = get().docs[0];
-      if (current) await get().removeDoc(current.id);
-    }
+    // One document at a time: importing replaces the current one (and its
+    // highlights).
+    const list = [...files].slice(0, 1);
+    const current = get().docs[0];
+    if (current) await get().removeDoc(current.id);
     for (const file of list) {
       const kind = kindFromName(file.name);
       if (!kind) {
@@ -350,7 +325,6 @@ export const useSegue = create<Store>((set, get) => ({
           sections: { ...s.sections, [id]: parsed.sections },
           outlines: { ...s.outlines, [id]: parsed.outline },
           fileCache: { [id]: bytes },
-          openTabs: [...s.openTabs, id],
           activeDocId: id,
           activeLocator: doc.lastLocator,
           viewportExcerpt: parsed.sections[0]?.text.slice(0, 1200) ?? "",
@@ -371,11 +345,9 @@ export const useSegue = create<Store>((set, get) => ({
     await idbDelete("docs", id);
     await idbDelete("files", id);
     await idbDeleteByIndex("highlights", id);
-    const { docs, chunks, highlights, sections, outlines, fileCache, activeDocId, openTabs } =
-      get();
+    const { docs, chunks, highlights, sections, outlines, fileCache, activeDocId } = get();
     const nextDocs = docs.filter((d) => d.id !== id);
     const nextId = activeDocId === id ? (nextDocs[0]?.id ?? null) : activeDocId;
-    const nextTabs = openTabs.filter((t) => t !== id);
     const { [id]: _, ...restSec } = sections;
     const { [id]: __, ...restFiles } = fileCache;
     const { [id]: ___, ...restOut } = outlines;
@@ -387,7 +359,6 @@ export const useSegue = create<Store>((set, get) => ({
       sections: restSec,
       outlines: restOut,
       fileCache: restFiles,
-      openTabs: nextId && !nextTabs.includes(nextId) ? [...nextTabs, nextId] : nextTabs,
       activeDocId: nextId,
       activeLocator: nextDocs.find((d) => d.id === nextId)?.lastLocator ?? "",
     });

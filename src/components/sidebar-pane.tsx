@@ -5,6 +5,7 @@ import {
   FileText,
   Highlighter,
   Library,
+  PanelLeftClose,
   Plus,
   Search,
   Sparkles,
@@ -14,7 +15,6 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { SettingsView } from "@/components/settings-view";
 import { searchChunks } from "@/lib/bm25";
-import { isDesktop } from "@/lib/platform";
 import { docOutline, useSegue } from "@/lib/store";
 import type { DocKind, OutlineItem, SidebarView } from "@/lib/types";
 import { cn, formatBytes } from "@/lib/utils";
@@ -48,7 +48,6 @@ function ImportButton() {
         ref={ref}
         type="file"
         accept=".pdf,.epub,application/pdf,application/epub+zip"
-        multiple={isDesktop()}
         className="hidden"
         onChange={(e) => {
           if (e.target.files) void importFiles(e.target.files);
@@ -468,11 +467,12 @@ function KindIcon({ kind }: { kind: DocKind }) {
   return <BookMarked className={cls} />;
 }
 
-export function ActivityRail({ side = "right" }: { side?: "left" | "right" }) {
+export function ActivityRail() {
   const view = useSegue((s) => s.sidebarView);
   const setView = useSegue((s) => s.setSidebarView);
   const sidebarOpen = useSegue((s) => s.sidebarOpen);
   const setSidebarOpen = useSegue((s) => s.setSidebarOpen);
+  const setRailOpen = useSegue((s) => s.setRailOpen);
 
   const toggleView = (id: SidebarView) => {
     if (view === id && sidebarOpen) {
@@ -520,12 +520,7 @@ export function ActivityRail({ side = "right" }: { side?: "left" | "right" }) {
   }[];
 
   return (
-    <nav
-      className={cn(
-        "flex h-full w-12 shrink-0 flex-col items-center gap-1 border-border bg-bg py-2",
-        side === "right" ? "border-l" : "border-r",
-      )}
-    >
+    <nav className="flex h-full w-12 shrink-0 flex-col items-center gap-1 border-r border-border bg-bg py-2">
       {items.map((it) => (
         <button
           key={it.id}
@@ -541,6 +536,20 @@ export function ActivityRail({ side = "right" }: { side?: "left" | "right" }) {
           <it.icon className="size-4" strokeWidth={1.7} />
         </button>
       ))}
+      {/* The rail toggle lived in the removed title bar; its collapse control
+          now closes the rail from here. */}
+      <div className="mt-auto flex w-full flex-col items-center">
+        <div className="mb-1 h-px w-6 border-t border-border" />
+        <button
+          type="button"
+          title="收起侧边栏"
+          aria-label="收起侧边栏"
+          onClick={() => setRailOpen(false)}
+          className="flex size-11 items-center justify-center rounded-md text-muted transition-colors duration-150 hover:bg-fg/10 hover:text-fg"
+        >
+          <PanelLeftClose className="size-4" strokeWidth={1.7} />
+        </button>
+      </div>
     </nav>
   );
 }

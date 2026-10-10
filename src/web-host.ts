@@ -9,14 +9,13 @@ import type { SegueHost } from "@/lib/platform";
 import type { AiSettingsPatch, AiSettingsView } from "@/lib/types";
 
 /**
- * Browser implementation of the host API, the web counterpart of
- * electron/preload.cjs. AI settings live in localStorage under one key in the
- * same JSON shape as the desktop's settings.json — including the API key,
- * which is the standard serverless-web tradeoff (the desktop keeps the key in
- * the main process instead; neither ever hands it back to the UI, only a
- * hasKey flag). Chat requests go straight from the browser to the provider
- * through the shared src/shared pipeline, so endpoints must allow the
- * app's origin (Ollama/LM Studio: enable CORS for it, or run the desktop app).
+ * Browser implementation of the host API, installed at boot by src/main.tsx.
+ * AI settings live in localStorage under one key in a JSON shape mirroring
+ * src/shared/settings.mjs — including the API key, the standard
+ * serverless-web tradeoff (the UI still only ever sees a hasKey flag).
+ * Chat requests go straight from the browser to the provider through the
+ * shared src/shared pipeline, so endpoints must allow the app's origin
+ * (Ollama/LM Studio: enable CORS for it).
  */
 
 const STORAGE_KEY = "segue.web.ai.settings";
@@ -80,7 +79,7 @@ export function createWebHost(): SegueHost {
     abortChat: () => activeChat?.abort(),
 
     openExternal: async (url) => {
-      // The web equivalent of shell.openExternal: a new browser tab.
+      // External links open a new browser tab.
       if (/^(https?:|mailto:)/i.test(url)) window.open(url, "_blank", "noopener,noreferrer");
     },
   };

@@ -20,7 +20,7 @@ import {
   type EpubViewSettings,
 } from "@/lib/epub/readest";
 import { dropBook, getBook } from "@/lib/parse/foliate";
-import { host, isDesktop } from "@/lib/platform";
+import { host } from "@/lib/platform";
 import { useSegue } from "@/lib/store";
 import type { DocKind } from "@/lib/types";
 
@@ -163,7 +163,6 @@ export function FoliateReader({
     let cancelled = false;
     let view: FoliateView | null = null;
     let dropRelayObserver: MutationObserver | null = null;
-    const rootEl = root.current;
     lastReportedRef.current = "";
     initedRef.current = false;
     setFailed(false);
@@ -185,7 +184,7 @@ export function FoliateReader({
     };
 
     // foliate's default for external links is window.open — route them to the
-    // host instead: system browser on desktop, a new tab on the web.
+    // host instead: a new browser tab.
     const onExternalLink = (e: Event) => {
       e.preventDefault();
       const href = (e as CustomEvent<{ a: HTMLAnchorElement; href: string }>).detail?.href;
@@ -418,25 +417,6 @@ export function FoliateReader({
     // the stored fraction is the only truth.
     const onScrollerScroll = () => reportMetrics();
 
-    // Hover-reveal for the desktop's overlay scrollbar. The book iframes
-    // extend under the right-edge strip (the paginator's margins are
-    // iframe-internal padding), and iframe-internal pointer events never
-    // reach this document — so the strip is sensed from both surfaces: this
-    // root (UI overlays, the fxl host background) and each section document
-    // (book surface, relayed with its iframe offset). Only boundary crossings
-    // are reported to the pane ("segue-reader-zone"). The web has native
-    // scrollbars and no zone sensor.
-    let zoneIn = false;
-    const updateZone = (clientX: number) => {
-      if (!rootEl) return;
-      const inZone = clientX >= rootEl.getBoundingClientRect().right - 14;
-      if (inZone === zoneIn) return;
-      zoneIn = inZone;
-      window.dispatchEvent(new CustomEvent("segue-reader-zone", { detail: { inZone } }));
-    };
-    const onRootPointerMove = (e: PointerEvent) => updateZone(e.clientX);
-    if (isDesktop()) rootEl?.addEventListener("pointermove", onRootPointerMove);
-
     // FoliateViewer.tsx docLoadHandler: per-section DOM fixups, then the
     // relay listeners (once per document).
     const onLoad = (e: Event) => {
@@ -498,15 +478,6 @@ export function FoliateReader({
         sectionDoc.addEventListener("keydown", relayKeydown);
         sectionDoc.addEventListener("dragover", relayDragover);
         sectionDoc.addEventListener("drop", relayDrop);
-        // Book-surface half of the desktop's scrollbar hover-reveal: translate
-        // the iframe-space X into page space (the frame element lives in this
-        // document) and feed the same zone sensor.
-        if (isDesktop()) {
-          sectionDoc.addEventListener("pointermove", (e) => {
-            const frame = sectionDoc.defaultView?.frameElement;
-            if (frame) updateZone(frame.getBoundingClientRect().left + e.clientX);
-          });
-        }
       }
     };
 
@@ -520,16 +491,6 @@ export function FoliateReader({
         view = document.createElement("foliate-view") as FoliateView;
         viewRef.current = view;
         Object.assign(view.style, { width: "100%", height: "100%", display: "block" });
-        // Desktop only: the fixed-layout strip scrolls on its own host element
-        // inside the view's shadow tree — it has no exported part, so the
-        // overlay-scrollbar shell hides it with a rule injected into that
-        // tree (styles.css covers the paginator via foliate-view::part
-        // (container)). The web keeps every native scrollbar.
-        if (isDesktop() && view.shadowRoot) {
-          const scrollbarStyle = document.createElement("style");
-          scrollbarStyle.textContent = "foliate-fxl { scrollbar-width: none; }";
-          view.shadowRoot.appendChild(scrollbarStyle);
-        }
         view.addEventListener("relocate", onRelocate);
         view.addEventListener("draw-annotation", onDrawAnnotation);
         view.addEventListener("external-link", onExternalLink);
@@ -654,7 +615,6 @@ export function FoliateReader({
       window.removeEventListener("message", onMessage);
       window.removeEventListener("segue-reader-seek", onSeek);
       window.removeEventListener("keydown", onWindowKeydown);
-      rootEl?.removeEventListener("pointermove", onRootPointerMove);
       if (seekRaf != null) cancelAnimationFrame(seekRaf);
       progressRef.current = null;
       dropRelayObserver?.disconnect();

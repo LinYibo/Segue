@@ -2,10 +2,9 @@ export type DocKind = "pdf" | "epub";
 
 export type SidebarView = "library" | "search" | "highlights" | "settings" | "chat";
 
-// AI provider configuration, mirrored from electron/providers.mjs via the
-// settings IPC. The API key itself never crosses IPC — entries carry only a
-// hasKey flag, and a saved entry without a key falls back to its preset's
-// environment variable.
+// AI provider configuration, shared with src/shared/providers.mjs. The API
+// key itself is never handed back to the UI — entries carry only a hasKey
+// flag.
 export type AiProviderPreset = {
   id: string;
   label: string;

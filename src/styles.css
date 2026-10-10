@@ -1,12 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* Register the renderer sources explicitly. The desktop build scans the repo
-   root automatically, but the site demo (site/) processes this same file with
-   site/ as the detection root — ../src is outside it and every app-only
-   utility (h-dvh, h-full, truncate, …) would be dropped from the demo. */
-@source "./";
-
 @theme {
   --color-bg: #ffffff;
   --color-surface: #f7f6f2;
@@ -182,28 +176,6 @@
   .prose-reader dd {
     margin: 0.25rem 0 0.5rem 1.2rem;
   }
-}
-
-/* Desktop only. The reading surface scrolls by wheel/keyboard and the pane
-   draws its own draggable overlay thumb (ReaderPane), so the native
-   scrollbars stay hidden — hiding also keeps the 1px page margins symmetric
-   (a classic bar reserves ~17px on the right). The web shell keeps the
-   browser's native scrollbars; both platforms paint the data attribute at
-   boot (lib/platform.ts markPlatform). */
-[data-segue-platform="desktop"] .reader-scroll {
-  scrollbar-width: none;
-}
-[data-segue-platform="desktop"] .reader-scroll::-webkit-scrollbar {
-  display: none;
-}
-
-/* Desktop only: in scrolled flow the foliate renderers scroll internally, and
-   the native scrollbar would overlap the overlay thumb. The paginator's
-   scroller exports part=container (view.js exportparts); scrollbar-width
-   does NOT inherit, so the fixed-layout host gets its own rule injected by
-   the reader. */
-[data-segue-platform="desktop"] foliate-view::part(container) {
-  scrollbar-width: none;
 }
 
 /* Reader highlights (EPUB and PDF alike) are drawn by foliate's overlayer

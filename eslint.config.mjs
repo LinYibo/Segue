@@ -5,16 +5,13 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
-/** Flat ESLint config for the Segue app (Vite + React SPA + Electron shell). */
+/** Flat ESLint config for Segue (Vite + React SPA). */
 export default tseslint.config(
   {
     ignores: [
       "dist/**",
       "out/**",
       "node_modules/**",
-      // the site is a standalone project (like GitTasks' site/) — no eslint of
-      // its own, and none inherited from the app
-      "site/**",
       // vendored upstream library (readest's foliate-js fork), kept pristine
       "src/foliate-js/**",
       // generated pdf.js runtime assets (worker/cmaps/fonts/wasm), not our code
@@ -42,11 +39,6 @@ export default tseslint.config(
       ],
       "@typescript-eslint/no-explicit-any": "off",
     },
-  },
-  // Electron preload scripts must be CommonJS.
-  {
-    files: ["**/*.cjs"],
-    rules: { "@typescript-eslint/no-require-imports": "off" },
   },
   // Disable rules that conflict with Prettier formatting.
   prettier,

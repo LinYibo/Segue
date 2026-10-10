@@ -9,8 +9,8 @@ const inputCls =
 /**
  * Sidebar "add provider" form, reached from the chat pane's model menu: pick
  * a preset, point it at a base URL and model, save the key. The key goes into
- * the host's settings store (settings.json on desktop, localStorage on the
- * web) and never round-trips back into the renderer. Adding a provider
+ * the host's settings store (localStorage) and never round-trips back into
+ * the renderer. Adding a provider
  * activates it and returns to the view the form replaced; Cancel does the
  * same without saving.
  */
