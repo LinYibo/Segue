@@ -1,0 +1,10 @@
+{
+  // Static hosting for trysegue.com (same shape as GitTasks' `gittasks`
+  // worker): the site's vite build output served as Workers static assets,
+  // no script. `npx wrangler deploy` from site/ after `npm run build`.
+  "name": "segue",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist"
+  }
+}

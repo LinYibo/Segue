@@ -1,13 +1,19 @@
-import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import {
+  withAddedProvider,
+  withRemovedProvider,
+  withSelectedProvider,
+} from "../src/shared/settings.mjs";
 
 /**
  * App-level AI settings, persisted as <userData>/settings.json and read only
- * by the main process — API keys never cross IPC. Shape:
+ * by the main process — API keys never cross IPC. The entry/domain ops live in
+ * src/shared/settings.mjs (shared with the web demo's localStorage host); this
+ * module is the file-backed adapter. Shape:
  *   { activeId?, providers: [{ id, provider, baseUrl, model, apiKey? }] }
  * Each entry overrides its preset's baseUrl/model; a missing apiKey falls
- * back to the preset's environment variable (see providers.mjs).
+ * back to the preset's environment variable (see src/shared/providers.mjs).
  */
 
 export function settingsPath(userDataDir) {
@@ -35,34 +41,14 @@ function write(path, data) {
 /** Append a provider entry and activate it. apiKey semantics: undefined =
  * fall back to the preset's env var, non-empty string = save with the entry. */
 export function addProvider(path, patch) {
-  const data = readSettings(path) ?? {};
-  const entry = {
-    id: `pvdr-${randomUUID().slice(0, 8)}`,
-    provider: String(patch?.provider ?? "").trim(),
-    baseUrl: String(patch?.baseUrl ?? "").trim(),
-    model: String(patch?.model ?? "").trim(),
-  };
-  if (typeof patch?.apiKey === "string" && patch.apiKey.trim()) {
-    entry.apiKey = patch.apiKey.trim();
-  }
-  write(path, { ...data, providers: [...(data.providers ?? []), entry], activeId: entry.id });
+  write(path, withAddedProvider(readSettings(path) ?? {}, patch));
 }
 
 export function selectProvider(path, id) {
-  const data = readSettings(path) ?? {};
-  if (!(data.providers ?? []).some((p) => p.id === id)) {
-    throw new Error(`Unknown provider ${id}`);
-  }
-  write(path, { ...data, activeId: id });
+  write(path, withSelectedProvider(readSettings(path) ?? {}, id));
 }
 
 /** Remove a provider entry; removing the active one activates the first left. */
 export function removeProvider(path, id) {
-  const data = readSettings(path) ?? {};
-  const providers = (data.providers ?? []).filter((p) => p.id !== id);
-  write(path, {
-    ...data,
-    providers,
-    activeId: data.activeId === id ? (providers[0]?.id ?? null) : data.activeId,
-  });
+  write(path, withRemovedProvider(readSettings(path) ?? {}, id));
 }

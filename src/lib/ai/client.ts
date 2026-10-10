@@ -1,4 +1,5 @@
-import type { AiSettingsPatch, AiSettingsView, Excerpt, LibraryEntry, ToolCall } from "../types";
+import { host, type ChatEventLike } from "../platform";
+import type { Excerpt, LibraryEntry, ToolCall } from "../types";
 
 export type WireMessage = {
   role: "user" | "assistant" | "tool";
@@ -27,32 +28,6 @@ export type StreamHandlers = {
   onError: (error: string) => void;
 };
 
-type ChatEventLike = {
-  type: string;
-  text?: string;
-  id?: string;
-  name?: string;
-  arguments?: string;
-  error?: string;
-};
-
-/** Injected by electron/preload.cjs; boot fails loudly if it is missing. */
-type ElectronAPI = {
-  getAiSettings: () => Promise<AiSettingsView>;
-  addAiProvider: (patch: AiSettingsPatch) => Promise<AiSettingsView>;
-  selectAiProvider: (id: string) => Promise<AiSettingsView>;
-  removeAiProvider: (id: string) => Promise<AiSettingsView>;
-  chat: (body: unknown, onEvent: (evt: ChatEventLike) => void) => Promise<void>;
-  abortChat: () => void;
-  openExternal: (url: string) => Promise<void>;
-};
-
-declare global {
-  interface Window {
-    electronAPI: ElectronAPI;
-  }
-}
-
 function dispatchChatEvent(evt: ChatEventLike, handlers: StreamHandlers) {
   if (evt.type === "delta" && evt.text) handlers.onDelta(evt.text);
   if (evt.type === "tool_call" && evt.id && evt.name) {
@@ -69,11 +44,12 @@ function dispatchChatEvent(evt: ChatEventLike, handlers: StreamHandlers) {
 }
 
 /**
- * Chat streams over IPC: the Electron main process holds the configured
- * provider's API key and forwards its SSE as ready-made events.
+ * Chat streams through the host API: the desktop's main process holds the
+ * configured provider's API key and forwards its SSE as ready-made events;
+ * the web host fetches the provider directly with the same event surface.
  */
 export async function streamChat(req: ChatRequest, handlers: StreamHandlers, signal?: AbortSignal) {
-  const api = window.electronAPI;
+  const api = host();
   if (signal?.aborted) return;
   signal?.addEventListener("abort", () => api.abortChat(), { once: true });
 

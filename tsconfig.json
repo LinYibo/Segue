@@ -22,6 +22,9 @@
       "@/*": [
         "./src/*"
       ],
+      "@shared/*": [
+        "./src/shared/*"
+      ],
       "@pdfjs/*": [
         "./node_modules/pdfjs-dist/legacy/build/*"
       ]

@@ -12,6 +12,9 @@ export default tseslint.config(
       "dist/**",
       "out/**",
       "node_modules/**",
+      // the site is a standalone project (like GitTasks' site/) — no eslint of
+      // its own, and none inherited from the app
+      "site/**",
       // vendored upstream library (readest's foliate-js fork), kept pristine
       "src/foliate-js/**",
       // generated pdf.js runtime assets (worker/cmaps/fonts/wasm), not our code

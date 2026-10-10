@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { streamChat, type WireMessage } from "./ai/client";
 import { searchChunks } from "./bm25";
 import { chunkParsed, outlineFromSections } from "./chunk";
+import { host, isDesktop } from "./platform";
 import { idbDelete, idbDeleteByIndex, idbGetAll, idbGetFile, idbPut, idbPutFile } from "./idb";
 import { kindFromName, parseDocument } from "./parse";
 import { findQuoteCfi, getBook } from "./parse/foliate";
@@ -233,22 +234,22 @@ export const useSegue = create<Store>((set, get) => ({
     }
   },
   refreshAiSettings: async () => {
-    const view = await window.electronAPI.getAiSettings();
+    const view = await host().getAiSettings();
     set({ aiSettings: view, aiAvailable: isAiAvailable(view) });
   },
 
   addAiProvider: async (patch) => {
-    const view = await window.electronAPI.addAiProvider(patch);
+    const view = await host().addAiProvider(patch);
     set({ aiSettings: view, aiAvailable: isAiAvailable(view) });
   },
 
   selectAiProvider: async (id) => {
-    const view = await window.electronAPI.selectAiProvider(id);
+    const view = await host().selectAiProvider(id);
     set({ aiSettings: view, aiAvailable: isAiAvailable(view) });
   },
 
   removeAiProvider: async (id) => {
-    const view = await window.electronAPI.removeAiProvider(id);
+    const view = await host().removeAiProvider(id);
     set({ aiSettings: view, aiAvailable: isAiAvailable(view) });
   },
 
@@ -307,7 +308,14 @@ export const useSegue = create<Store>((set, get) => ({
   setSelection: (selection) => set({ selection }),
 
   importFiles: async (files) => {
-    const list = [...files];
+    // The web shell reads a single document at a time: importing replaces the
+    // current one (and its highlights); the desktop library accumulates.
+    let list = [...files];
+    if (!isDesktop()) {
+      list = list.slice(0, 1);
+      const current = get().docs[0];
+      if (current) await get().removeDoc(current.id);
+    }
     for (const file of list) {
       const kind = kindFromName(file.name);
       if (!kind) {

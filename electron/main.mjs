@@ -1,8 +1,8 @@
 import { join } from "node:path";
 import { app, BrowserWindow, ipcMain, shell } from "electron";
-import { buildChatContext } from "./ai-context.mjs";
+import { aiSettingsView, resolveAiConfig } from "../src/shared/providers.mjs";
+import { streamProviderChat } from "../src/shared/chat.mjs";
 import { loadDotEnv } from "./env.mjs";
-import { adapterFor, activeEntry, PROVIDER_PRESETS, resolveAiConfig, resolveEntry } from "./providers.mjs";
 import { addProvider, readSettings, removeProvider, selectProvider, settingsPath } from "./settings.mjs";
 
 loadDotEnv();
@@ -16,46 +16,29 @@ let activeChat = null;
 
 const settingsFile = () => settingsPath(app.getPath("userData"));
 
-// What the renderer may see about the AI setup — never a key itself.
-function aiSettingsView() {
-  const saved = readSettings(settingsFile());
-  return {
-    activeId: activeEntry(saved)?.id ?? null,
-    providers: (saved?.providers ?? []).map((entry) => {
-      const cfg = resolveEntry(entry);
-      return {
-        id: cfg.id,
-        provider: cfg.providerId,
-        label: cfg.label,
-        baseUrl: cfg.baseUrl,
-        model: cfg.model,
-        hasKey: Boolean(cfg.apiKey),
-        keyFromEnv: cfg.keyFromEnv,
-      };
-    }),
-    presets: PROVIDER_PRESETS.map((p) => ({
-      ...p,
-      envKeySet: Boolean(p.envKey && process.env[p.envKey]),
-    })),
-  };
+// What the renderer may see about the AI setup — never a key itself. The
+// view/resolve logic lives in src/shared (shared with the web demo); the
+// main process only contributes where the settings file and env keys live.
+function settingsView() {
+  return aiSettingsView(readSettings(settingsFile()), process.env);
 }
 
 function registerIpc() {
-  ipcMain.handle("settings:get", () => aiSettingsView());
+  ipcMain.handle("settings:get", () => settingsView());
 
   ipcMain.handle("settings:add", (_event, patch) => {
     addProvider(settingsFile(), patch);
-    return aiSettingsView();
+    return settingsView();
   });
 
   ipcMain.handle("settings:select", (_event, id) => {
     selectProvider(settingsFile(), String(id));
-    return aiSettingsView();
+    return settingsView();
   });
 
   ipcMain.handle("settings:remove", (_event, id) => {
     removeProvider(settingsFile(), String(id));
-    return aiSettingsView();
+    return settingsView();
   });
 
   // SumatraPDF opens external links in the system browser, never in-app.
@@ -66,6 +49,8 @@ function registerIpc() {
 
   ipcMain.on("ai:chat:abort", () => activeChat?.abort());
 
+  // Streaming is the shared src/shared pipeline; the main process
+  // contributes the single-flight controller and the settings/env key store.
   ipcMain.handle("ai:chat", async (event, body) => {
     const sender = event.sender;
     const send = (ev) => {
@@ -75,50 +60,13 @@ function registerIpc() {
     activeChat?.abort();
     activeChat = new AbortController();
     const ac = activeChat;
-
-    const cfg = resolveAiConfig(readSettings(settingsFile()));
-    if (!cfg || !cfg.apiKey || !cfg.baseUrl || !cfg.model) {
-      send({ type: "error", error: "AI is not configured — add a provider from the model menu." });
-      send({ type: "done" });
-      return { ok: false };
-    }
-
-    const ctx = buildChatContext(body);
-    if ("error" in ctx) {
-      send({ type: "error", error: ctx.error.message });
-      send({ type: "done" });
-      return { ok: false };
-    }
-
     try {
-      const adapter = adapterFor(cfg.protocol);
-      const req = adapter.buildRequest(cfg, ctx);
-      const res = await fetch(req.url, {
-        method: "POST",
-        headers: req.headers,
-        body: JSON.stringify(req.body),
+      return await streamProviderChat({
+        cfg: resolveAiConfig(readSettings(settingsFile()), process.env),
+        body,
         signal: ac.signal,
+        send,
       });
-      if (!res.ok || !res.body) {
-        const errText = await res.text().catch(() => "");
-        send({
-          type: "error",
-          error: `${cfg.label} API error ${res.status}${errText ? `: ${errText.slice(0, 200)}` : ""}`,
-        });
-        send({ type: "done" });
-        return { ok: false };
-      }
-      for await (const ev of adapter.parseStream(res.body)) send(ev);
-      return { ok: true };
-    } catch (err) {
-      if (!ac.signal.aborted) {
-        send({
-          type: "error",
-          error: err instanceof Error ? err.message : "request failed",
-        });
-        send({ type: "done" });
-      }
-      return { ok: false };
     } finally {
       if (activeChat === ac) activeChat = null;
     }

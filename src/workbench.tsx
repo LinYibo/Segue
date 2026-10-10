@@ -3,13 +3,13 @@ import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from "reac
 import { PanelRightClose, PanelRightOpen, X } from "lucide-react";
 import { ActivityRail, SidebarPane } from "@/components/sidebar-pane";
 import { ChatPane } from "@/components/chat-pane";
-import { ReaderPane } from "@/components/reader-pane";
+import { ReaderPane } from "./reader-pane";
 import { useSegue } from "@/lib/store";
+import { useViewShortcuts } from "@/lib/use-view-shortcuts";
 import { cn } from "@/lib/utils";
 
 export function Workbench() {
   const boot = useSegue((s) => s.boot);
-  const setSidebarView = useSegue((s) => s.setSidebarView);
   const importFiles = useSegue((s) => s.importFiles);
   const importProgress = useSegue((s) => s.importProgress);
   const sidebarOpen = useSegue((s) => s.sidebarOpen);
@@ -27,30 +27,7 @@ export function Workbench() {
     void boot();
   }, [boot]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const meta = e.metaKey || e.ctrlKey;
-      if (meta && e.key.toLowerCase() === "f") {
-        e.preventDefault();
-        setSidebarView("search");
-        window.setTimeout(
-          () => document.querySelector<HTMLInputElement>("[data-search-input]")?.focus(),
-          0,
-        );
-      }
-      if (meta && e.key.toLowerCase() === "e") {
-        e.preventDefault();
-        setSidebarView("library");
-      }
-      if (meta && e.key.toLowerCase() === "l") {
-        e.preventDefault();
-        setSidebarView("chat");
-        document.querySelector<HTMLTextAreaElement>("textarea")?.focus();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [setSidebarView]);
+  useViewShortcuts();
 
   return (
     <div

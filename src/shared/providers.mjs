@@ -90,12 +90,14 @@ export function activeEntry(saved) {
 }
 
 /** Merge one saved entry with its preset into a runtime config. Unknown
- * provider ids throw — settings.json is either app-written or hand-edited,
- * and hand-edited files should fail loudly. */
-export function resolveEntry(entry) {
+ * provider ids throw — settings are either app-written or hand-edited,
+ * and hand-edited data should fail loudly. `env` supplies the preset env-var
+ * fallback (process.env on the desktop, {} on the web — keys live in the
+ * browser's localStorage there). */
+export function resolveEntry(entry, env = {}) {
   const preset = PROVIDER_PRESETS.find((p) => p.id === entry.provider);
   if (!preset) throw new Error(`Unknown provider "${entry.provider}"`);
-  const envKey = preset.envKey ? process.env[preset.envKey] : undefined;
+  const envKey = preset.envKey ? env[preset.envKey] : undefined;
   return {
     id: entry.id,
     providerId: preset.id,
@@ -109,7 +111,32 @@ export function resolveEntry(entry) {
 }
 
 /** Runtime config for the active entry, or null before any provider is added. */
-export function resolveAiConfig(saved) {
+export function resolveAiConfig(saved, env = {}) {
   const entry = activeEntry(saved);
-  return entry ? resolveEntry(entry) : null;
+  return entry ? resolveEntry(entry, env) : null;
+}
+
+/** What a host shows its renderer about the AI setup — never a key itself.
+ * The Electron main process serves it over the settings IPC; the web app
+ * calls it directly from its localStorage host. */
+export function aiSettingsView(saved, env = {}) {
+  return {
+    activeId: activeEntry(saved)?.id ?? null,
+    providers: (saved?.providers ?? []).map((entry) => {
+      const cfg = resolveEntry(entry, env);
+      return {
+        id: cfg.id,
+        provider: cfg.providerId,
+        label: cfg.label,
+        baseUrl: cfg.baseUrl,
+        model: cfg.model,
+        hasKey: Boolean(cfg.apiKey),
+        keyFromEnv: cfg.keyFromEnv,
+      };
+    }),
+    presets: PROVIDER_PRESETS.map((p) => ({
+      ...p,
+      envKeySet: Boolean(p.envKey && env[p.envKey]),
+    })),
+  };
 }

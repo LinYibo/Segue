@@ -62,6 +62,9 @@ export function buildRequest(cfg, ctx) {
       "Content-Type": "application/json",
       "x-api-key": cfg.apiKey,
       "anthropic-version": ANTHROPIC_VERSION,
+      // Anthropic's opt-in for direct browser calls (the web app fetches from
+      // the renderer's origin); the desktop's main-process fetch ignores it.
+      "anthropic-dangerous-direct-browser-access": "true",
     },
     body: payload,
   };

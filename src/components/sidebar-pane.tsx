@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { SettingsView } from "@/components/settings-view";
 import { searchChunks } from "@/lib/bm25";
+import { isDesktop } from "@/lib/platform";
 import { docOutline, useSegue } from "@/lib/store";
 import type { DocKind, OutlineItem, SidebarView } from "@/lib/types";
 import { cn, formatBytes } from "@/lib/utils";
@@ -47,7 +48,7 @@ function ImportButton() {
         ref={ref}
         type="file"
         accept=".pdf,.epub,application/pdf,application/epub+zip"
-        multiple
+        multiple={isDesktop()}
         className="hidden"
         onChange={(e) => {
           if (e.target.files) void importFiles(e.target.files);
@@ -467,7 +468,7 @@ function KindIcon({ kind }: { kind: DocKind }) {
   return <BookMarked className={cls} />;
 }
 
-export function ActivityRail() {
+export function ActivityRail({ side = "right" }: { side?: "left" | "right" }) {
   const view = useSegue((s) => s.sidebarView);
   const setView = useSegue((s) => s.setSidebarView);
   const sidebarOpen = useSegue((s) => s.sidebarOpen);
@@ -519,7 +520,12 @@ export function ActivityRail() {
   }[];
 
   return (
-    <nav className="flex h-full w-12 shrink-0 flex-col items-center gap-1 border-l border-border bg-bg py-2">
+    <nav
+      className={cn(
+        "flex h-full w-12 shrink-0 flex-col items-center gap-1 border-border bg-bg py-2",
+        side === "right" ? "border-l" : "border-r",
+      )}
+    >
       {items.map((it) => (
         <button
           key={it.id}

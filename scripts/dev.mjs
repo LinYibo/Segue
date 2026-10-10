@@ -5,7 +5,17 @@
  * session.
  */
 import { spawn, execSync } from "node:child_process";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import electronPath from "electron";
+
+// Resolve the Vite CLI from the dependency chain. The bin is not in vite's
+// exports map; go through the package directory.
+const viteBin = join(
+  dirname(createRequire(import.meta.url).resolve("vite/package.json")),
+  "bin",
+  "vite.js",
+);
 
 const DEV_URL = "http://localhost:5173/";
 
@@ -51,7 +61,7 @@ if (await serving()) {
   process.exit(1);
 }
 
-vite = spawn(process.execPath, ["node_modules/vite/bin/vite.js"], {
+vite = spawn(process.execPath, [viteBin], {
   stdio: "inherit",
 });
 const deadline = Date.now() + 30_000;
